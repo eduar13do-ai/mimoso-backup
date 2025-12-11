@@ -1,3 +1,4 @@
+// Fix Build Netlify v1.0.2 - Force Update
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 // @ts-ignore
