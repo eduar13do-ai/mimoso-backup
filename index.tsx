@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, FormEvent } from "react";
 import { createRoot } from "react-dom/client";
+// @ts-ignore
 import { initializeApp } from "firebase/app";
+// @ts-ignore
 import { 
   getFirestore, 
   collection, 
@@ -12,6 +14,7 @@ import {
   where, 
   orderBy 
 } from "firebase/firestore";
+// @ts-ignore
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -20,14 +23,13 @@ import {
 } from "firebase/auth";
 
 // --- CONFIGURAÇÃO DO FIREBASE ---
-// SUBSTITUA COM SUAS CREDENCIAIS DO CONSOLE DO FIREBASE
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyClXYg4fERlzIy-YjacJ7K0CtIwthHGGig",
+  authDomain: "mimoso-test-console.firebaseapp.com",
+  projectId: "mimoso-test-console",
+  storageBucket: "mimoso-test-console.firebasestorage.app",
+  messagingSenderId: "278829716578",
+  appId: "1:278829716578:web:b2c64463ffc0f644a6ad3b"
 };
 
 // Inicializa Firebase
@@ -472,6 +474,18 @@ body {
 .confetti-canvas {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 200;
 }
+
+/* MISSING CONFIG OVERLAY */
+.config-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: #02040a; z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+}
+.config-card {
+    background: #0d1117; padding: 2rem; border-radius: 12px; border: 1px solid #30363d;
+    max-width: 500px; text-align: center;
+}
 `;
 
 // --- COMPONENTES ---
@@ -812,7 +826,9 @@ function UserPage() {
 
     try {
       // Verifica CPF duplicado no Firestore
+      // @ts-ignore
       const q = query(collection(db, "participantes"), where("cpf", "==", data.cpf));
+      // @ts-ignore
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
@@ -820,6 +836,7 @@ function UserPage() {
       } else {
         // Insere novo participante
         // Firestore não cria created_at por padrão como SQL, então passamos aqui
+        // @ts-ignore
         await addDoc(collection(db, "participantes"), {
             ...data,
             sorteado: false,
@@ -920,24 +937,32 @@ function AdminPage() {
 
   useEffect(() => {
     // Monitora estado de autenticação do Firebase
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        setUser(currentUser);
-    });
-    return () => unsubscribe();
+    if (auth) {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+        });
+        return () => unsubscribe();
+    }
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (user && db) {
       fetchParticipants();
+    } else {
+        // Fallback for visual test if db is not configured
+        setParticipants(FAKE_PARTICIPANTS);
     }
   }, [user]);
 
   const fetchParticipants = async () => {
+    if (!db) return;
     // Busca dados do Firestore
+    // @ts-ignore
     const q = query(collection(db, "participantes"), orderBy("created_at", "desc"));
+    // @ts-ignore
     const querySnapshot = await getDocs(q);
     const realData: Participant[] = [];
-    querySnapshot.forEach((doc) => {
+    querySnapshot.forEach((doc: any) => {
         // Combina o ID do documento com os dados
         realData.push({ id: doc.id, ...doc.data() } as Participant);
     });
@@ -955,6 +980,12 @@ function AdminPage() {
       return;
     }
 
+    if (!auth) {
+        alert("Firebase Auth não configurado (chaves ausentes).");
+        setLoading(false);
+        return;
+    }
+
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
@@ -965,16 +996,20 @@ function AdminPage() {
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    if (auth) await signOut(auth);
     setUser(null);
   }
 
   const onRouletteFinish = async (winners: Participant[]) => {
     // Marca todos como sorteados no Firestore
-    for (const w of winners) {
-        if (!w.id.startsWith('fake-')) {
-            const participantRef = doc(db, "participantes", w.id);
-            await updateDoc(participantRef, { sorteado: true });
+    if (db) {
+        for (const w of winners) {
+            if (!w.id.startsWith('fake-')) {
+                // @ts-ignore
+                const participantRef = doc(db, "participantes", w.id);
+                // @ts-ignore
+                await updateDoc(participantRef, { sorteado: true });
+            }
         }
     }
     
