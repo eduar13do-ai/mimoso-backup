@@ -47,20 +47,21 @@ interface Participant {
   id_plataforma: string;
   sorteado: boolean;
   created_at: string;
+  participation_count?: number; // Novo campo
 }
 
 // --- DADOS FAKES (PARA VISUALIZAÇÃO) ---
 const FAKE_PARTICIPANTS: Participant[] = [
-  { id: 'fake-1', nome: "João 'Mimoso' Silva", email: 'joao@game.com', telefone: '(11) 99999-1234', cpf: '123.***.***-00', id_plataforma: 'JoaoGamer_YT', sorteado: false, created_at: new Date().toISOString() },
-  { id: 'fake-2', nome: 'Maria Sorte', email: 'maria@sorte.com', telefone: '(21) 98888-5678', cpf: '456.***.***-11', id_plataforma: 'MaryLucky', sorteado: true, created_at: new Date(Date.now() - 10000000).toISOString() },
-  { id: 'fake-3', nome: 'Pedro Apostador', email: 'pedro@bet.com', telefone: '(31) 97777-9012', cpf: '789.***.***-22', id_plataforma: 'PedrinhoBet', sorteado: false, created_at: new Date(Date.now() - 5000000).toISOString() },
-  { id: 'fake-4', nome: 'Ana Streamer', email: 'ana@live.com', telefone: '(41) 96666-3456', cpf: '321.***.***-33', id_plataforma: 'AnaLiveON', sorteado: false, created_at: new Date(Date.now() - 200000).toISOString() },
-  { id: 'fake-5', nome: 'Carlos Vencedor', email: 'carlos@win.com', telefone: '(51) 95555-7890', cpf: '654.***.***-44', id_plataforma: 'CarlinhosVencedor', sorteado: false, created_at: new Date(Date.now() - 3600000).toISOString() },
-  { id: 'fake-6', nome: 'Lucas Player', email: 'lucas@play.com', telefone: '(11) 94444-1111', cpf: '987.***.***-55', id_plataforma: 'LucasP_007', sorteado: false, created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: 'fake-7', nome: 'Fernanda Games', email: 'fer@games.com', telefone: '(71) 93333-2222', cpf: '159.***.***-66', id_plataforma: 'Nanda_Gamer', sorteado: false, created_at: new Date(Date.now() - 40000000).toISOString() },
-  { id: 'fake-8', nome: 'Roberto Firmino', email: 'beto@futa.com', telefone: '(81) 92222-3333', cpf: '777.***.***-77', id_plataforma: 'BetoGoal', sorteado: false, created_at: new Date(Date.now() - 100000).toISOString() },
-  { id: 'fake-9', nome: 'Julia Roberts', email: 'ju@movie.com', telefone: '(11) 91111-2222', cpf: '888.***.***-88', id_plataforma: 'JuCine', sorteado: false, created_at: new Date(Date.now() - 900000).toISOString() },
-  { id: 'fake-10', nome: 'Goku Silva', email: 'goku@dbz.com', telefone: '(99) 99999-9999', cpf: '999.***.***-99', id_plataforma: 'Kakaroto123', sorteado: false, created_at: new Date(Date.now() - 50000).toISOString() },
+  { id: 'fake-1', nome: "João 'Mimoso' Silva", email: 'joao@game.com', telefone: '(11) 99999-1234', cpf: '123.***.***-00', id_plataforma: 'JoaoGamer_YT', sorteado: false, created_at: new Date().toISOString(), participation_count: 12 },
+  { id: 'fake-2', nome: 'Maria Sorte', email: 'maria@sorte.com', telefone: '(21) 98888-5678', cpf: '456.***.***-11', id_plataforma: 'MaryLucky', sorteado: true, created_at: new Date(Date.now() - 10000000).toISOString(), participation_count: 5 },
+  { id: 'fake-3', nome: 'Pedro Apostador', email: 'pedro@bet.com', telefone: '(31) 97777-9012', cpf: '789.***.***-22', id_plataforma: 'PedrinhoBet', sorteado: false, created_at: new Date(Date.now() - 5000000).toISOString(), participation_count: 3 },
+  { id: 'fake-4', nome: 'Ana Streamer', email: 'ana@live.com', telefone: '(41) 96666-3456', cpf: '321.***.***-33', id_plataforma: 'AnaLiveON', sorteado: false, created_at: new Date(Date.now() - 200000).toISOString(), participation_count: 1 },
+  { id: 'fake-5', nome: 'Carlos Vencedor', email: 'carlos@win.com', telefone: '(51) 95555-7890', cpf: '654.***.***-44', id_plataforma: 'CarlinhosVencedor', sorteado: false, created_at: new Date(Date.now() - 3600000).toISOString(), participation_count: 8 },
+  { id: 'fake-6', nome: 'Lucas Player', email: 'lucas@play.com', telefone: '(11) 94444-1111', cpf: '987.***.***-55', id_plataforma: 'LucasP_007', sorteado: false, created_at: new Date(Date.now() - 86400000).toISOString(), participation_count: 2 },
+  { id: 'fake-7', nome: 'Fernanda Games', email: 'fer@games.com', telefone: '(71) 93333-2222', cpf: '159.***.***-66', id_plataforma: 'Nanda_Gamer', sorteado: false, created_at: new Date(Date.now() - 40000000).toISOString(), participation_count: 15 },
+  { id: 'fake-8', nome: 'Roberto Firmino', email: 'beto@futa.com', telefone: '(81) 92222-3333', cpf: '777.***.***-77', id_plataforma: 'BetoGoal', sorteado: false, created_at: new Date(Date.now() - 100000).toISOString(), participation_count: 1 },
+  { id: 'fake-9', nome: 'Julia Roberts', email: 'ju@movie.com', telefone: '(11) 91111-2222', cpf: '888.***.***-88', id_plataforma: 'JuCine', sorteado: false, created_at: new Date(Date.now() - 900000).toISOString(), participation_count: 4 },
+  { id: 'fake-10', nome: 'Goku Silva', email: 'goku@dbz.com', telefone: '(99) 99999-9999', cpf: '999.***.***-99', id_plataforma: 'Kakaroto123', sorteado: false, created_at: new Date(Date.now() - 50000).toISOString(), participation_count: 42 },
 ];
 
 // --- ESTILOS CSS ---
@@ -171,6 +172,14 @@ body {
   background: #010409; border: 1px solid #30363d; color: white; padding: 0.6rem 1rem;
   border-radius: 6px; width: 300px;
 }
+.bulk-actions {
+  display: flex; gap: 1rem; margin-bottom: 1rem;
+}
+.btn-sm {
+    padding: 0.5rem 1rem; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;
+    font-size: 0.75rem; text-transform: uppercase;
+}
+
 .table-container {
   background: #0d1117; border: 1px solid #21262d; border-radius: 12px; overflow: hidden;
 }
@@ -472,7 +481,7 @@ body {
 
 /* Canvas Confetti */
 .confetti-canvas {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 200;
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999;
 }
 
 /* MISSING CONFIG OVERLAY */
@@ -505,7 +514,7 @@ function Confetti() {
     const particles: any[] = [];
     const colors = ['#fbbf24', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6'];
 
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 200; i++) {
       particles.push({
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
@@ -810,6 +819,7 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
 // 1. PÁGINA DE USUÁRIO
 function UserPage() {
   const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -840,11 +850,12 @@ function UserPage() {
         await addDoc(collection(db, "participantes"), {
             ...data,
             sorteado: false,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            participation_count: 1 // Começa com 1 participação
         });
         
-        alert("Cadastro realizado com sucesso! Boa sorte!");
         (e.target as HTMLFormElement).reset();
+        setShowSuccess(true);
       }
     } catch (error: any) {
       alert("Erro: " + error.message);
@@ -855,6 +866,19 @@ function UserPage() {
 
   return (
     <div className="user-layout">
+      {/* SUCCESS MODAL */}
+      {showSuccess && (
+        <div className="modal-overlay" style={{zIndex: 2000}}>
+          <Confetti />
+          <div className="modal-content" style={{maxWidth: '400px', padding: '3rem', textAlign: 'center'}}>
+             <div style={{fontSize: '5rem', marginBottom: '1rem'}}>✨</div>
+             <h2 style={{color: 'white', marginBottom: '0.5rem', fontSize: '2rem'}}>Cadastro Confirmado!</h2>
+             <p style={{color: '#9ca3af', marginBottom: '2rem'}}>Seu nome já está na nossa lista. Fique ligado na live!</p>
+             <button className="btn-yellow" onClick={() => setShowSuccess(false)}>FECHAR</button>
+          </div>
+        </div>
+      )}
+
       <div className="user-card">
         <div className="brand-header">
            <div style={{color: 'var(--primary)', fontWeight: 'bold', letterSpacing: '1px', fontSize: '0.9rem', marginBottom: '10px'}}>
@@ -1054,7 +1078,50 @@ function AdminPage() {
 
   const eligibleCount = participants.filter(p => !p.sorteado).length;
   const winnerCount = participants.filter(p => p.sorteado).length;
-  const filtered = participants.filter(p => p.nome.toLowerCase().includes(filter.toLowerCase()) || p.cpf.includes(filter) || p.id_plataforma.toLowerCase().includes(filter.toLowerCase()));
+  // FILTRO ATUALIZADO: Inclui filtro por participação
+  const filtered = participants.filter(p => 
+      p.nome.toLowerCase().includes(filter.toLowerCase()) || 
+      p.cpf.includes(filter) || 
+      p.id_plataforma.toLowerCase().includes(filter.toLowerCase()) ||
+      (p.participation_count?.toString() || "1").includes(filter)
+  );
+
+  // MANIPULADORES DE AÇÃO EM MASSA
+  const handleMarkAll = async () => {
+    if (!confirm(`Tem certeza que deseja marcar TODOS os ${filtered.length} participantes listados como PREMIADOS?`)) return;
+    
+    const idsToUpdate = filtered.map(p => p.id);
+    setParticipants(prev => prev.map(p => idsToUpdate.includes(p.id) ? { ...p, sorteado: true } : p));
+
+    if (db) {
+        for (const p of filtered) {
+             if (!p.id.startsWith('fake-') && !p.sorteado) {
+                 try {
+                    // @ts-ignore
+                    await updateDoc(doc(db, "participantes", p.id), { sorteado: true });
+                 } catch(e) { console.error(e); }
+             }
+        }
+    }
+  };
+
+  const handleClearAll = async () => {
+     if (!confirm(`Tem certeza que deseja LIMPAR o status de sorteio de TODOS os ${filtered.length} participantes listados?`)) return;
+     
+     const idsToUpdate = filtered.map(p => p.id);
+     setParticipants(prev => prev.map(p => idsToUpdate.includes(p.id) ? { ...p, sorteado: false } : p));
+     
+     if (db) {
+        for (const p of filtered) {
+             if (!p.id.startsWith('fake-') && p.sorteado) {
+                 try {
+                    // @ts-ignore
+                    await updateDoc(doc(db, "participantes", p.id), { sorteado: false });
+                 } catch(e) { console.error(e); }
+             }
+        }
+    }
+  };
 
   return (
     <div>
@@ -1120,11 +1187,21 @@ function AdminPage() {
         <div className="filter-bar">
            <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
               <h3 style={{color:'white', fontSize:'1rem', marginRight:'1rem'}}>Cadastros ({participants.length})</h3>
-              <input className="search-input" placeholder="Buscar por nome, WhatsApp, CPF ou ID..." value={filter} onChange={e=>setFilter(e.target.value)} />
+              <input className="search-input" placeholder="Buscar por nome, CPF, ID ou Nº de Lives..." value={filter} onChange={e=>setFilter(e.target.value)} />
            </div>
            <div>
               <button className="btn-top btn-dark" style={{fontSize:'0.7rem', padding: '0.5rem 1rem'}}>📥 Exportar CSV</button>
            </div>
+        </div>
+
+        {/* BULK ACTIONS */}
+        <div className="bulk-actions">
+            <button className="btn-sm" style={{background: '#21262d', color: '#f59e0b', border: '1px solid #f59e0b'}} onClick={handleMarkAll}>
+                👑 Marcar todos como premiados
+            </button>
+            <button className="btn-sm" style={{background: '#21262d', color: '#ef4444', border: '1px solid #ef4444'}} onClick={handleClearAll}>
+                🗑️ Limpar todos os sorteados
+            </button>
         </div>
 
         <div className="table-container">
@@ -1136,7 +1213,7 @@ function AdminPage() {
                 <th>ID Plataforma</th>
                 <th>CPF</th>
                 <th>Data de Cadastro</th>
-                <th>Participou De</th>
+                <th>Participações</th>
                 <th>Status de Prêmio</th>
               </tr>
             </thead>
@@ -1148,7 +1225,7 @@ function AdminPage() {
                   <td><span className="tag-id">{p.id_plataforma}</span></td>
                   <td style={{color:'#8b949e'}}>{p.cpf}</td>
                   <td>{new Date(p.created_at).toLocaleDateString()}</td>
-                  <td>Live Atual</td>
+                  <td>{p.participation_count || 1} Lives</td>
                   <td>{p.sorteado ? <span style={{color:'#10b981'}}>Premiado</span> : <span style={{color:'#8b949e'}}>Pendente</span>}</td>
                 </tr>
               ))}
