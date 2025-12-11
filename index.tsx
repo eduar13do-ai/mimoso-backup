@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 // @ts-ignore
 import { initializeApp } from "firebase/app";
@@ -934,6 +934,7 @@ function AdminPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [filter, setFilter] = useState("");
   const [showRoulette, setShowRoulette] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Monitora estado de autenticação do Firebase
@@ -956,17 +957,28 @@ function AdminPage() {
 
   const fetchParticipants = async () => {
     if (!db) return;
-    // Busca dados do Firestore
-    // @ts-ignore
-    const q = query(collection(db, "participantes"), orderBy("created_at", "desc"));
-    // @ts-ignore
-    const querySnapshot = await getDocs(q);
-    const realData: Participant[] = [];
-    querySnapshot.forEach((doc: any) => {
-        // Combina o ID do documento com os dados
-        realData.push({ id: doc.id, ...doc.data() } as Participant);
-    });
-    setParticipants([...realData, ...FAKE_PARTICIPANTS]);
+    try {
+        // @ts-ignore
+        const q = query(collection(db, "participantes"), orderBy("created_at", "desc"));
+        // @ts-ignore
+        const querySnapshot = await getDocs(q);
+        const realData: Participant[] = [];
+        querySnapshot.forEach((doc: any) => {
+            // Combina o ID do documento com os dados
+            realData.push({ id: doc.id, ...doc.data() } as Participant);
+        });
+        setParticipants([...realData, ...FAKE_PARTICIPANTS]);
+        setError(null);
+    } catch (err: any) {
+        console.error("Erro ao buscar participantes:", err);
+        if (err.message && (err.message.includes("Cloud Firestore API has not been used") || err.code === 'permission-denied')) {
+            setError("⚠️ A API do Firestore não está ativada. Acesse o Console do Firebase > Criação > Firestore Database e clique em 'Criar banco de dados'.");
+        } else {
+            setError("Erro ao conectar com o banco de dados: " + err.message);
+        }
+        // Mantém dados fakes para a UI não quebrar totalmente
+        setParticipants(FAKE_PARTICIPANTS);
+    }
   };
 
   const handleLogin = async (e: FormEvent) => {
@@ -1003,13 +1015,18 @@ function AdminPage() {
   const onRouletteFinish = async (winners: Participant[]) => {
     // Marca todos como sorteados no Firestore
     if (db) {
-        for (const w of winners) {
-            if (!w.id.startsWith('fake-')) {
-                // @ts-ignore
-                const participantRef = doc(db, "participantes", w.id);
-                // @ts-ignore
-                await updateDoc(participantRef, { sorteado: true });
+        try {
+            for (const w of winners) {
+                if (!w.id.startsWith('fake-')) {
+                    // @ts-ignore
+                    const participantRef = doc(db, "participantes", w.id);
+                    // @ts-ignore
+                    await updateDoc(participantRef, { sorteado: true });
+                }
             }
+        } catch (e) {
+            console.error("Erro ao atualizar vencedores", e);
+            alert("Erro ao salvar vencedores no banco. Verifique a conexão/permissões.");
         }
     }
     
@@ -1048,6 +1065,13 @@ function AdminPage() {
             onClose={() => setShowRoulette(false)}
             onFinish={onRouletteFinish}
           />
+      )}
+
+      {/* ERROR BANNER */}
+      {error && (
+          <div style={{background: '#ef4444', color: 'white', padding: '1rem', textAlign: 'center', fontWeight: 'bold', marginBottom: '1rem'}}>
+              {error}
+          </div>
       )}
 
       {/* Header com Botões */}
