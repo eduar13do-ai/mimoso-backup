@@ -1,4 +1,4 @@
-// Fix Build Netlify v1.0.2 - Force Update
+// Fix Build Netlify v1.0.5 - Roulette Filters Logic
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 // @ts-ignore
@@ -13,7 +13,8 @@ import {
   doc, 
   query, 
   where, 
-  orderBy 
+  orderBy,
+  onSnapshot
 } from "firebase/firestore";
 // @ts-ignore
 import { 
@@ -48,21 +49,22 @@ interface Participant {
   id_plataforma: string;
   sorteado: boolean;
   created_at: string;
-  participation_count?: number; // Novo campo
+  last_participation_at?: string; // Novo campo para rastrear a última vez que se inscreveu
+  participation_count?: number;
 }
 
 // --- DADOS FAKES (PARA VISUALIZAÇÃO) ---
 const FAKE_PARTICIPANTS: Participant[] = [
-  { id: 'fake-1', nome: "João 'Mimoso' Silva", email: 'joao@game.com', telefone: '(11) 99999-1234', cpf: '123.***.***-00', id_plataforma: 'JoaoGamer_YT', sorteado: false, created_at: new Date().toISOString(), participation_count: 12 },
+  { id: 'fake-1', nome: "João 'Mimoso' Silva", email: 'joao@game.com', telefone: '(11) 99999-1234', cpf: '123.***.***-00', id_plataforma: 'JoaoGamer_YT', sorteado: false, created_at: new Date().toISOString(), last_participation_at: new Date().toISOString(), participation_count: 12 },
   { id: 'fake-2', nome: 'Maria Sorte', email: 'maria@sorte.com', telefone: '(21) 98888-5678', cpf: '456.***.***-11', id_plataforma: 'MaryLucky', sorteado: true, created_at: new Date(Date.now() - 10000000).toISOString(), participation_count: 5 },
   { id: 'fake-3', nome: 'Pedro Apostador', email: 'pedro@bet.com', telefone: '(31) 97777-9012', cpf: '789.***.***-22', id_plataforma: 'PedrinhoBet', sorteado: false, created_at: new Date(Date.now() - 5000000).toISOString(), participation_count: 3 },
   { id: 'fake-4', nome: 'Ana Streamer', email: 'ana@live.com', telefone: '(41) 96666-3456', cpf: '321.***.***-33', id_plataforma: 'AnaLiveON', sorteado: false, created_at: new Date(Date.now() - 200000).toISOString(), participation_count: 1 },
   { id: 'fake-5', nome: 'Carlos Vencedor', email: 'carlos@win.com', telefone: '(51) 95555-7890', cpf: '654.***.***-44', id_plataforma: 'CarlinhosVencedor', sorteado: false, created_at: new Date(Date.now() - 3600000).toISOString(), participation_count: 8 },
   { id: 'fake-6', nome: 'Lucas Player', email: 'lucas@play.com', telefone: '(11) 94444-1111', cpf: '987.***.***-55', id_plataforma: 'LucasP_007', sorteado: false, created_at: new Date(Date.now() - 86400000).toISOString(), participation_count: 2 },
   { id: 'fake-7', nome: 'Fernanda Games', email: 'fer@games.com', telefone: '(71) 93333-2222', cpf: '159.***.***-66', id_plataforma: 'Nanda_Gamer', sorteado: false, created_at: new Date(Date.now() - 40000000).toISOString(), participation_count: 15 },
-  { id: 'fake-8', nome: 'Roberto Firmino', email: 'beto@futa.com', telefone: '(81) 92222-3333', cpf: '777.***.***-77', id_plataforma: 'BetoGoal', sorteado: false, created_at: new Date(Date.now() - 100000).toISOString(), participation_count: 1 },
+  { id: 'fake-8', nome: 'Roberto Firmino', email: 'beto@futa.com', telefone: '(81) 92222-3333', cpf: '777.***.***-77', id_plataforma: 'BetoGoal', sorteado: false, created_at: new Date(Date.now() - 100000).toISOString(), last_participation_at: new Date().toISOString(), participation_count: 2 },
   { id: 'fake-9', nome: 'Julia Roberts', email: 'ju@movie.com', telefone: '(11) 91111-2222', cpf: '888.***.***-88', id_plataforma: 'JuCine', sorteado: false, created_at: new Date(Date.now() - 900000).toISOString(), participation_count: 4 },
-  { id: 'fake-10', nome: 'Goku Silva', email: 'goku@dbz.com', telefone: '(99) 99999-9999', cpf: '999.***.***-99', id_plataforma: 'Kakaroto123', sorteado: false, created_at: new Date(Date.now() - 50000).toISOString(), participation_count: 42 },
+  { id: 'fake-10', nome: 'Goku Silva', email: 'goku@dbz.com', telefone: '(99) 99999-9999', cpf: '999.***.***-99', id_plataforma: 'Kakaroto123', sorteado: false, created_at: new Date(Date.now() - 50000).toISOString(), last_participation_at: new Date().toISOString(), participation_count: 42 },
 ];
 
 // --- ESTILOS CSS ---
@@ -130,6 +132,22 @@ body {
 }
 .page-title { font-size: 2rem; font-weight: 800; color: #fff; margin: 0; }
 .page-subtitle { color: var(--text-muted); font-size: 0.9rem; }
+
+/* Pulsing Dot for Realtime */
+.realtime-indicator {
+    display: flex; align-items: center; gap: 6px; font-size: 0.75rem; 
+    color: var(--admin-green); background: rgba(16, 185, 129, 0.1); 
+    padding: 2px 8px; border-radius: 12px; border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.pulsing-dot {
+    width: 8px; height: 8px; background-color: var(--admin-green); border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 4px rgba(16, 185, 129, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
 
 .admin-actions { display: flex; gap: 1rem; }
 .btn-top {
@@ -613,10 +631,22 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
   // Lógica de Filtro
   const getFilteredParticipants = () => {
     let list = participants.filter(p => !p.sorteado);
+    
+    // Define 24h atrás para considerar "Recente/Hoje"
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
     if (filterType === 'new') {
-      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // APENAS quem criou a conta nas últimas 24h
       list = list.filter(p => new Date(p.created_at) > oneDayAgo);
+    } else if (filterType === 'present') {
+      // Quem participou nas últimas 24h (seja criando conta ou fazendo check-in)
+      list = list.filter(p => {
+          const lastActivity = p.last_participation_at ? new Date(p.last_participation_at) : new Date(p.created_at);
+          return lastActivity > oneDayAgo;
+      });
     }
+    // 'all' já pega todos que !p.sorteado
+    
     return list;
   };
 
@@ -766,7 +796,7 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
 
                 <div className="filter-group" style={{marginTop:'0'}}>
                     <button className={`filter-btn ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')} disabled={spinning}>👥 Todos</button>
-                    <button className={`filter-btn ${filterType === 'new' ? 'active' : ''}`} onClick={() => setFilterType('new')} disabled={spinning}>👤+ Novos</button>
+                    <button className={`filter-btn ${filterType === 'new' ? 'active' : ''}`} onClick={() => setFilterType('new')} disabled={spinning}>👶 Novos (Live)</button>
                     <button className={`filter-btn ${filterType === 'present' ? 'active' : ''}`} onClick={() => setFilterType('present')} disabled={spinning}>🟢 Presentes</button>
                 </div>
 
@@ -821,6 +851,7 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
 function UserPage() {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState({ title: "Cadastro Confirmado!", text: "Seu nome já está na nossa lista. Fique ligado na live!" });
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -843,21 +874,42 @@ function UserPage() {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        alert("Erro: Este CPF já está cadastrado!");
+        // --- LÓGICA DE REENTRADA ---
+        const existingDoc = querySnapshot.docs[0];
+        const existingData = existingDoc.data();
+        const newCount = (existingData.participation_count || 1) + 1;
+        
+        // @ts-ignore
+        await updateDoc(doc(db, "participantes", existingDoc.id), {
+            ...data, // Atualiza dados caso tenham mudado
+            participation_count: newCount,
+            sorteado: false, // Reseta status para poder ganhar novamente
+            last_participation_at: new Date().toISOString() // Marca que participou hoje
+        });
+
+        setSuccessMessage({
+            title: "Participação Registrada!",
+            text: `Bem-vindo de volta! Você já tem ${newCount} participações confirmadas.`
+        });
       } else {
-        // Insere novo participante
-        // Firestore não cria created_at por padrão como SQL, então passamos aqui
+        // --- NOVO CADASTRO ---
         // @ts-ignore
         await addDoc(collection(db, "participantes"), {
             ...data,
             sorteado: false,
             created_at: new Date().toISOString(),
-            participation_count: 1 // Começa com 1 participação
+            last_participation_at: new Date().toISOString(),
+            participation_count: 1
         });
         
-        (e.target as HTMLFormElement).reset();
-        setShowSuccess(true);
+        setSuccessMessage({
+            title: "Cadastro Confirmado!",
+            text: "Seu nome já está na nossa lista. Fique ligado na live!"
+        });
       }
+      
+      (e.target as HTMLFormElement).reset();
+      setShowSuccess(true);
     } catch (error: any) {
       alert("Erro: " + error.message);
     } finally {
@@ -873,8 +925,8 @@ function UserPage() {
           <Confetti />
           <div className="modal-content" style={{maxWidth: '400px', padding: '3rem', textAlign: 'center'}}>
              <div style={{fontSize: '5rem', marginBottom: '1rem'}}>✨</div>
-             <h2 style={{color: 'white', marginBottom: '0.5rem', fontSize: '2rem'}}>Cadastro Confirmado!</h2>
-             <p style={{color: '#9ca3af', marginBottom: '2rem'}}>Seu nome já está na nossa lista. Fique ligado na live!</p>
+             <h2 style={{color: 'white', marginBottom: '0.5rem', fontSize: '2rem'}}>{successMessage.title}</h2>
+             <p style={{color: '#9ca3af', marginBottom: '2rem'}}>{successMessage.text}</p>
              <button className="btn-yellow" onClick={() => setShowSuccess(false)}>FECHAR</button>
           </div>
         </div>
@@ -973,38 +1025,37 @@ function AdminPage() {
 
   useEffect(() => {
     if (user && db) {
-      fetchParticipants();
+        // --- MUDANÇA PARA REALTIME ---
+        // Cria query
+        // @ts-ignore
+        const q = query(collection(db, "participantes"), orderBy("created_at", "desc"));
+        
+        // Inscreve no listener (onSnapshot)
+        // @ts-ignore
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const realData: Participant[] = [];
+            querySnapshot.forEach((doc: any) => {
+                realData.push({ id: doc.id, ...doc.data() } as Participant);
+            });
+            // Mantém os fakes apenas se quiser misturar, senão poderia ser só realData
+            setParticipants([...realData, ...FAKE_PARTICIPANTS]);
+            setError(null);
+        }, (err: any) => {
+            console.error("Erro ao buscar participantes:", err);
+            if (err.message && (err.message.includes("Cloud Firestore API has not been used") || err.code === 'permission-denied')) {
+                setError("⚠️ A API do Firestore não está ativada. Acesse o Console do Firebase.");
+            } else {
+                setError("Erro realtime: " + err.message);
+            }
+        });
+
+        // Limpa listener ao desmontar
+        return () => unsubscribe();
     } else {
-        // Fallback for visual test if db is not configured
+        // Fallback visual
         setParticipants(FAKE_PARTICIPANTS);
     }
   }, [user]);
-
-  const fetchParticipants = async () => {
-    if (!db) return;
-    try {
-        // @ts-ignore
-        const q = query(collection(db, "participantes"), orderBy("created_at", "desc"));
-        // @ts-ignore
-        const querySnapshot = await getDocs(q);
-        const realData: Participant[] = [];
-        querySnapshot.forEach((doc: any) => {
-            // Combina o ID do documento com os dados
-            realData.push({ id: doc.id, ...doc.data() } as Participant);
-        });
-        setParticipants([...realData, ...FAKE_PARTICIPANTS]);
-        setError(null);
-    } catch (err: any) {
-        console.error("Erro ao buscar participantes:", err);
-        if (err.message && (err.message.includes("Cloud Firestore API has not been used") || err.code === 'permission-denied')) {
-            setError("⚠️ A API do Firestore não está ativada. Acesse o Console do Firebase > Criação > Firestore Database e clique em 'Criar banco de dados'.");
-        } else {
-            setError("Erro ao conectar com o banco de dados: " + err.message);
-        }
-        // Mantém dados fakes para a UI não quebrar totalmente
-        setParticipants(FAKE_PARTICIPANTS);
-    }
-  };
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -1147,10 +1198,16 @@ function AdminPage() {
         <div className="live-status">
           <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
              <span className="live-badge">AO VIVO</span>
-             <span style={{color: '#8b949e'}}>Live (09/12/2025)</span>
+             {/* Indicador de Realtime */}
+             {db && (
+                 <div className="realtime-indicator">
+                     <div className="pulsing-dot"></div>
+                     <span>Sincronização Ativa</span>
+                 </div>
+             )}
           </div>
           <h1 className="page-title">Sorteio Em Andamento</h1>
-          <p className="page-subtitle">Em andamento - Clique em (realizar sorteio) para sortear os usuários cadastrados.</p>
+          <p className="page-subtitle">Os cadastros aparecem automaticamente na lista abaixo.</p>
         </div>
         <div className="admin-actions">
           <button className="btn-top btn-dark" onClick={handleLogout}>Sair</button>
