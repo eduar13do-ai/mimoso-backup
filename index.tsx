@@ -1,4 +1,4 @@
-// Fix Build Netlify v1.0.5 - Roulette Filters Logic
+// Fix Build Netlify v1.1.0 - Improved Stop Live Logic
 import { useState, useEffect, useRef, FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 // @ts-ignore
@@ -14,7 +14,8 @@ import {
   query, 
   where, 
   orderBy,
-  onSnapshot
+  onSnapshot,
+  limit
 } from "firebase/firestore";
 // @ts-ignore
 import { 
@@ -49,8 +50,15 @@ interface Participant {
   id_plataforma: string;
   sorteado: boolean;
   created_at: string;
-  last_participation_at?: string; // Novo campo para rastrear a última vez que se inscreveu
+  last_participation_at?: string; 
   participation_count?: number;
+}
+
+interface LiveSession {
+  id: string;
+  start_at: string;
+  end_at: string | null;
+  participant_count: number; // Quantos participaram/cadastraram durante a live
 }
 
 // --- DADOS FAKES (PARA VISUALIZAÇÃO) ---
@@ -130,6 +138,8 @@ body {
   background: #dc2626; color: white; padding: 4px 8px; border-radius: 4px; 
   font-weight: 800; font-size: 0.75rem; text-transform: uppercase; display: inline-block; width: fit-content;
 }
+.live-badge.off { background: #374151; color: #9ca3af; }
+
 .page-title { font-size: 2rem; font-weight: 800; color: #fff; margin: 0; }
 .page-subtitle { color: var(--text-muted); font-size: 0.9rem; }
 
@@ -149,7 +159,11 @@ body {
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-.admin-actions { display: flex; gap: 1rem; }
+.admin-actions { display: flex; gap: 1rem; align-items: center; }
+.timer-display {
+  font-family: monospace; font-size: 1.2rem; font-weight: bold; color: var(--primary);
+  background: #1f2937; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #374151;
+}
 .btn-top {
   padding: 0.75rem 1.5rem; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;
   text-transform: uppercase; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;
@@ -171,7 +185,11 @@ body {
   background: #0d1117; border: 1px solid #21262d;
   border-radius: 12px; padding: 1.5rem; position: relative;
   display: flex; flex-direction: column; height: 120px; justify-content: center;
+  transition: transform 0.2s;
 }
+.stat-box.clickable { cursor: pointer; }
+.stat-box.clickable:hover { border-color: var(--primary); transform: translateY(-2px); }
+
 .stat-label { color: var(--text-muted); font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; }
 .stat-number { font-size: 2.5rem; font-weight: 700; color: white; line-height: 1; }
 .stat-icon {
@@ -187,6 +205,15 @@ body {
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
   background: #0d1117; padding: 1rem; border-radius: 8px; border: 1px solid #21262d;
 }
+.table-tabs { display: flex; gap: 10px; }
+.tab-btn {
+  background: transparent; color: #8b949e; border: none; padding: 8px 16px; 
+  cursor: pointer; font-weight: 600; font-size: 0.9rem; border-radius: 6px;
+  transition: all 0.2s;
+}
+.tab-btn.active { background: rgba(251, 191, 36, 0.1); color: var(--primary); }
+.tab-btn:hover { color: white; }
+
 .search-input {
   background: #010409; border: 1px solid #30363d; color: white; padding: 0.6rem 1rem;
   border-radius: 6px; width: 300px;
@@ -292,14 +319,28 @@ body {
 
 .wheel-container {
   position: absolute;
-  top: -140px;
+  top: -250px;
   left: 50%;
   transform: translateX(-50%);
-  width: 300px;
-  height: 300px;
+  width: 600px;
+  height: 600px;
   z-index: 10;
   pointer-events: none;
   filter: drop-shadow(0 0 40px rgba(251, 191, 36, 0.15));
+}
+
+/* POINTERS CONTAINER FOR MULTIPLE ARROWS */
+.pointers-layer {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 25;
+    pointer-events: none;
+}
+
+.wheel-pointer-wrapper {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
 }
 
 .wheel-pointer {
@@ -307,7 +348,6 @@ body {
   top: -10px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 25;
   width: 40px; height: 50px;
   /* Complex pointer shape */
   filter: drop-shadow(0 4px 4px rgba(0,0,0,0.6));
@@ -352,21 +392,7 @@ body {
 /* Background Slices */
 .wheel-surface {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background: conic-gradient(
-    from 15deg, /* Rotate slightly so split is at top (360/12/2) */
-    #991b1b 0deg 30deg,
-    #111827 30deg 60deg,
-    #991b1b 60deg 90deg,
-    #111827 90deg 120deg,
-    #991b1b 120deg 150deg,
-    #111827 150deg 180deg,
-    #991b1b 180deg 210deg,
-    #111827 210deg 240deg,
-    #991b1b 240deg 270deg,
-    #111827 270deg 300deg,
-    #991b1b 300deg 330deg,
-    #111827 330deg 360deg
-  );
+  /* Conic gradient is now inline to support dynamic segments */
 }
 
 .wheel-text-slot {
@@ -378,7 +404,6 @@ body {
   align-items: center;
   justify-content: flex-end;
   padding-right: 15px;
-  font-size: 0.85rem;
   font-weight: 800;
   color: white;
   text-transform: uppercase;
@@ -486,6 +511,29 @@ body {
   font-size: 0.8rem; text-decoration: underline; cursor: pointer;
 }
 
+.import-container {
+  margin-top: 1rem;
+  background: #161b22;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #30363d;
+}
+.import-textarea {
+  width: 100%;
+  height: 100px;
+  background: #010409;
+  border: 1px solid #30363d;
+  color: #e6edf3;
+  padding: 0.5rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  resize: none;
+}
+.import-actions {
+  display: flex; gap: 0.5rem; margin-top: 0.5rem;
+}
+
 /* Winner List Animation */
 .winner-list-container {
   max-height: 200px; overflow-y: auto; text-align: left;
@@ -514,6 +562,13 @@ body {
     background: #0d1117; padding: 2rem; border-radius: 12px; border: 1px solid #30363d;
     max-width: 500px; text-align: center;
 }
+
+/* History Modal */
+.history-table {
+  width: 100%; border-collapse: collapse; margin-top: 1rem;
+}
+.history-table th { text-align: left; font-size: 0.75rem; color: #8b949e; padding-bottom: 0.5rem; border-bottom: 1px solid #30363d; }
+.history-table td { padding: 0.75rem 0; color: #e6edf3; font-size: 0.9rem; border-bottom: 1px solid #21262d; }
 `;
 
 // --- COMPONENTES ---
@@ -609,6 +664,88 @@ function CasinoBackground() {
   );
 }
 
+// Helper para formatar duração
+function formatDuration(start: string, end: string | null) {
+  if (!end) return "Em andamento";
+  const diff = new Date(end).getTime() - new Date(start).getTime();
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Modal Histórico de Lives
+function HistoryModal({ onClose }: { onClose: () => void }) {
+  const [history, setHistory] = useState<LiveSession[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!db) { setLoading(false); return; }
+      try {
+        // @ts-ignore
+        const q = query(collection(db, "lives"), orderBy("start_at", "desc"), limit(50));
+        // @ts-ignore
+        const snapshot = await getDocs(q);
+        const data: LiveSession[] = [];
+        snapshot.forEach((doc: any) => {
+           data.push({ id: doc.id, ...doc.data() });
+        });
+        setHistory(data);
+      } catch (e) {
+        console.error("Erro ao carregar historico", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadHistory();
+  }, []);
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content" style={{maxWidth: '600px', textAlign: 'left'}}>
+        <h2 style={{color: 'white', marginBottom: '0.5rem'}}>Histórico de Lives</h2>
+        <p style={{color: '#8b949e', fontSize: '0.9rem', marginBottom: '1.5rem'}}>
+          Registro das últimas sessões realizadas.
+        </p>
+
+        {loading ? (
+          <div style={{color: 'white', textAlign: 'center', padding: '2rem'}}>Carregando...</div>
+        ) : history.length === 0 ? (
+           <div style={{color: '#8b949e', textAlign: 'center', padding: '2rem'}}>Nenhum histórico encontrado.</div>
+        ) : (
+          <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+            <table className="history-table">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Horário Início</th>
+                  <th>Duração</th>
+                  <th>Participantes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map(session => (
+                  <tr key={session.id}>
+                    <td>{new Date(session.start_at).toLocaleDateString()}</td>
+                    <td>{new Date(session.start_at).toLocaleTimeString()}</td>
+                    <td>{formatDuration(session.start_at, session.end_at)}</td>
+                    <td style={{fontWeight: 'bold', color: '#fbbf24'}}>{session.participant_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        
+        <div style={{textAlign: 'center', marginTop: '1.5rem'}}>
+             <button className="btn-dark" onClick={onClose} style={{padding: '0.5rem 2rem', borderRadius: '8px', cursor: 'pointer', border: '1px solid #30363d', color: 'white'}}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Modal de Roleta
 interface RouletteModalProps {
   onClose: () => void;
@@ -619,17 +756,28 @@ interface RouletteModalProps {
 function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) {
   const [prize, setPrize] = useState(100);
   const [winnerCount, setWinnerCount] = useState(1);
-  const [filterType, setFilterType] = useState<'all' | 'new' | 'present'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'new' | 'present' | 'custom'>('all');
   const [spinning, setSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
+  
+  // Custom Import State
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [customParticipants, setCustomParticipants] = useState<Participant[]>([]);
   
   // Controle de estado para mostrar resultados
   const [showResults, setShowResults] = useState(false);
   const [drawnWinners, setDrawnWinners] = useState<Participant[]>([]);
   const [wheelSegments, setWheelSegments] = useState<Participant[]>([]);
+  const [segmentAngle, setSegmentAngle] = useState(0);
 
   // Lógica de Filtro
   const getFilteredParticipants = () => {
+    // Se o filtro for customizado (Lista importada do Facebook)
+    if (filterType === 'custom') {
+      return customParticipants.filter(p => !p.sorteado);
+    }
+
     let list = participants.filter(p => !p.sorteado);
     
     // Define 24h atrás para considerar "Recente/Hoje"
@@ -655,98 +803,145 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
   // Atualiza os segmentos visuais da roleta quando a lista muda
   useEffect(() => {
     const list = getFilteredParticipants();
-    // Pegamos até 12 nomes para exibir na roleta visualmente
-    // Se tiver menos de 12, repetimos para preencher
     let displayList: Participant[] = [];
+    
     if (list.length > 0) {
-      if (list.length >= 12) {
-        // Pega 12 aleatórios para mostrar
-        displayList = list.slice(0, 12); 
-      } else {
-        // Repete até encher
-        while (displayList.length < 12) {
-           displayList = [...displayList, ...list];
+        // Se a lista for muito pequena (ex: 2 pessoas), duplicamos para preencher a roleta visualmente
+        if (list.length < 8) {
+             while(displayList.length < 8) {
+                 displayList = [...displayList, ...list];
+             }
+        } else {
+             displayList = [...list];
         }
-        displayList = displayList.slice(0, 12);
-      }
     }
-    setWheelSegments(displayList);
-  }, [filterType, participants]);
+
+    // Embaralha para que não fiquem em ordem alfabética ou de entrada (mais justo visualmente)
+    // Usamos um seed simples ou apenas sort random para renderizar
+    const shuffled = [...displayList].sort(() => Math.random() - 0.5);
+    setWheelSegments(shuffled);
+    
+    if (shuffled.length > 0) {
+        setSegmentAngle(360 / shuffled.length);
+    }
+  }, [filterType, participants, customParticipants]);
+
+  const handleImportList = () => {
+    if (!importText.trim()) return;
+    
+    const lines = importText.split('\n').filter(l => l.trim().length > 0);
+    const imported: Participant[] = lines.map((name, index) => ({
+        id: `fb-import-${Date.now()}-${index}`,
+        nome: name.trim(),
+        email: 'facebook-import',
+        telefone: '',
+        cpf: '',
+        id_plataforma: 'Facebook',
+        sorteado: false,
+        created_at: new Date().toISOString()
+    }));
+
+    setCustomParticipants(imported);
+    setFilterType('custom');
+    setShowImport(false);
+  };
 
   const handleSpin = () => {
-    const list = getFilteredParticipants();
-    if (list.length === 0) return;
+    if (wheelSegments.length === 0) return;
 
     setSpinning(true);
     setShowResults(false);
     setDrawnWinners([]);
 
-    // 1. Sorteia N vencedores
-    const winners: Participant[] = [];
-    // Cria copia para não repetir
-    let tempPool = [...list];
-    
-    // Precisamos definir quem será o "Visual Winner" (o que a roleta aponta)
-    // Vamos dizer que o primeiro sorteado é o visual.
-    // Mas para a roleta, precisamos que esse vencedor esteja nos segmentos visuais.
-    
-    // Passo A: Escolhe o vencedor visual
-    const visualWinnerIndex = Math.floor(Math.random() * tempPool.length);
-    const mainWinner = tempPool[visualWinnerIndex];
-    
-    // Passo B: Remove ele do pool e adiciona aos vencedores
-    tempPool.splice(visualWinnerIndex, 1);
-    winners.push(mainWinner);
-
-    // Passo C: Sorteia os outros (se houver)
-    const extraCount = Math.min(winnerCount - 1, tempPool.length);
-    for(let i=0; i<extraCount; i++) {
-        const idx = Math.floor(Math.random() * tempPool.length);
-        winners.push(tempPool[idx]);
-        tempPool.splice(idx, 1);
-    }
-
-    setDrawnWinners(winners);
-
-    // 2. Prepara a Roleta Visual para cair no mainWinner
-    // Atualiza os segmentos para garantir que o mainWinner esteja na posição 0 (topo por padrão antes da rotação?)
-    // Não, vamos fazer assim: Colocamos o mainWinner no índice 0 do array de segmentos visuais.
-    // Os outros 11 preenchemos com aleatórios.
-    
-    const others = list.filter(p => p.id !== mainWinner.id);
-    // Embaralha others
-    const shuffledOthers = others.sort(() => 0.5 - Math.random()).slice(0, 11);
-    const newSegments = [mainWinner, ...shuffledOthers];
-    setWheelSegments(newSegments);
-
-    // 3. Calcula Rotação
-    // O ponteiro está no topo (0deg / 360deg).
-    // O segmento 0 começa em -15deg até +15deg (se forem 12 segmentos de 30deg e centralizados).
-    // O centro do segmento 0 está em 0deg (3 horas) na lógica padrão de rotação.
-    // Mas, nossa conic-gradient começa em 15deg (offset).
-    // Vamos alinhar: 
-    // Segmento 0 (Visual Winner) deve parar no TOP (270deg de rotação visual).
-    // A rotação adiciona ângulo. 
-    // Se target é 270 (topo), e start é 0 (direita).
-    // Rotation = 270.
-    
-    const segmentAngle = 360 / 12; // 30 graus
-    const randomOffset = (Math.random() * 20) - 10;
-    // Giro extra: 5 voltas completas (1800) + ajuste para 270 (topo)
-    const targetRotation = rotation + (360 * 5) + (270 - (rotation % 360)) + randomOffset;
+    // 1. Gira a roleta para uma posição aleatória (Física)
+    // Gira pelo menos 5 voltas (1800 deg) + um valor aleatório entre 0 e 360
+    const extraSpins = 360 * 5; 
+    const randomStopAngle = Math.floor(Math.random() * 360);
+    const targetRotation = rotation + extraSpins + randomStopAngle;
 
     setRotation(targetRotation);
 
-    // 4. Finalização
+    // 2. Calcula os vencedores baseado onde as setas "estão" em relação a rotação final
+    // Importante: A rotação é aplicada ao container da roleta.
+    // As setas estão fixas no topo (ou distribuídas).
+    // O ângulo efetivo de uma seta K é: (AngleSeta - RotationFinal) % 360
+    
+    const finalAngleNormalized = targetRotation % 360; // Posição que a roleta parou (0-360)
+    
+    // Calcula vencedores após o tempo de giro
     setTimeout(() => {
+        const currentWinners: Participant[] = [];
+        
+        // Para cada seta, calculamos quem está embaixo dela
+        for (let i = 0; i < winnerCount; i++) {
+            // Ângulo visual da seta (0 deg = topo, 120 deg = direita-baixo, etc)
+            const pointerAngle = i * (360 / winnerCount);
+            
+            // O segmento vencedor é aquele que, quando a roleta está girada em `finalAngleNormalized`,
+            // cobre a posição `pointerAngle`.
+            // Matemática inversa: O ângulo na roleta que está alinhado com o ponteiro
+            // Roleta gira horário (+). 
+            // AnguloDaFatiaNaRoleta = (PointerAngle - finalAngleNormalized)
+            // Precisamos normalizar para 0-360 positivo
+            
+            let effectiveAngle = (pointerAngle - finalAngleNormalized) % 360;
+            if (effectiveAngle < 0) effectiveAngle += 360; // Garante positivo
+            
+            // Mas espere! A conic-gradient começa em 0? Não, geralmente o CSS Conic começa no topo (0deg) ou direita (90deg)?
+            // CSS conic-gradient começa no topo (0deg) e gira horário.
+            // Nossa roleta visual: transform rotate() gira horário.
+            // Segmento 0 começa em 0deg e vai até segmentAngle.
+            
+            // Então, quem está em 'effectiveAngle'?
+            // Index = floor(effectiveAngle / segmentAngle)
+            
+            // *Ajuste Fino*: O CSS conic-gradient foi configurado com offset?
+            // No código antigo: from 15deg. Vamos remover o offset fixo e fazer dinâmico no render
+            // para simplificar a matemática. Vamos assumir start em 0deg.
+            
+            const winnerIndex = Math.floor(effectiveAngle / segmentAngle);
+            
+            // Proteção contra index out of bounds (arredondamento)
+            const safeIndex = winnerIndex % wheelSegments.length;
+            currentWinners.push(wheelSegments[safeIndex]);
+        }
+
+        setDrawnWinners(currentWinners);
         setSpinning(false);
         setShowResults(true);
-        // onFinish só quando o usuário clicar em "Confirmar" ou "Fechar" na tela de resultado
-    }, 5500); // 5s spin + buffer
+    }, 5500); 
   };
 
   const confirmResult = () => {
-    onFinish(drawnWinners);
+    // Se for custom, marcamos sorteado localmente na lista custom
+    if (filterType === 'custom') {
+        const winnerIds = drawnWinners.map(w => w.id);
+        setCustomParticipants(prev => prev.map(p => winnerIds.includes(p.id) ? {...p, sorteado: true} : p));
+        setShowResults(false);
+    } else {
+        onFinish(drawnWinners);
+    }
+  };
+
+  // Generate CSS Conic Gradient dynamically
+  const generateGradient = () => {
+     if (wheelSegments.length === 0) return 'none';
+     // Alternating colors
+     const colors = wheelSegments.map((_, i) => {
+         const color = i % 2 === 0 ? '#991b1b' : '#111827';
+         const start = i * segmentAngle;
+         const end = (i + 1) * segmentAngle;
+         return `${color} ${start}deg ${end}deg`;
+     }).join(', ');
+     return `conic-gradient(${colors})`;
+  };
+
+  // Adjust font size based on count
+  const getFontSize = () => {
+      if (wheelSegments.length > 50) return '0.4rem';
+      if (wheelSegments.length > 30) return '0.5rem';
+      if (wheelSegments.length > 12) return '0.65rem';
+      return '0.85rem';
   };
 
   return (
@@ -757,20 +952,37 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
         
         {/* WHEEL SECTION */}
         <div className="wheel-container">
-            <div className="wheel-pointer"></div>
+            {/* DYNAMIC POINTERS */}
+            <div className="pointers-layer">
+                {Array.from({ length: winnerCount }).map((_, i) => (
+                    <div 
+                        key={i} 
+                        className="wheel-pointer-wrapper" 
+                        style={{ transform: `rotate(${i * (360 / winnerCount)}deg)` }}
+                    >
+                        <div className="wheel-pointer"></div>
+                    </div>
+                ))}
+            </div>
+
             <div className="wheel-rotate" style={{ transform: `rotate(${rotation}deg)` }}>
                 {/* Borda interna e Fundo */}
                 <div className="wheel-inner-border">
-                    <div className="wheel-surface"></div>
+                    <div className="wheel-surface" style={{ background: generateGradient() }}></div>
                     
                     {/* Renderizar Textos dos Segmentos */}
                     {wheelSegments.map((seg, i) => (
                         <div 
                             key={i} 
                             className="wheel-text-slot"
-                            style={{ transform: `rotate(${i * (360/12) + 30}deg)` }} /* +30 para centralizar no wedge */
+                            style={{ 
+                                transform: `rotate(${i * segmentAngle + (segmentAngle/2)}deg)`, // Center text in slice
+                                height: '0px', // Origin point
+                                fontSize: getFontSize()
+                            }} 
                         >
-                            {seg.nome.split(' ')[0]}
+                            {/* Truncate long names if many segments */}
+                            {wheelSegments.length > 30 ? seg.nome.substring(0, 10) + '..' : seg.nome.split(' ')[0]}
                         </div>
                     ))}
                 </div>
@@ -781,7 +993,8 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
         {/* CONTROLS (Hide during result view to focus on winner) */}
         {!showResults ? (
             <>
-                <div className="modal-section-title" style={{marginTop: '9rem'}}>Configuração</div>
+                {/* Aumentei a margin-top para 17rem para a roleta não sobrepor */}
+                <div className="modal-section-title" style={{marginTop: '24rem'}}>Configuração</div>
                 
                 {/* Qtd Vencedores */}
                 <div style={{display:'flex', justifyContent:'center', marginBottom:'1rem'}}>
@@ -795,15 +1008,35 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
                 </div>
 
                 <div className="filter-group" style={{marginTop:'0'}}>
-                    <button className={`filter-btn ${filterType === 'all' ? 'active' : ''}`} onClick={() => setFilterType('all')} disabled={spinning}>👥 Todos</button>
-                    <button className={`filter-btn ${filterType === 'new' ? 'active' : ''}`} onClick={() => setFilterType('new')} disabled={spinning}>👶 Novos (Live)</button>
-                    <button className={`filter-btn ${filterType === 'present' ? 'active' : ''}`} onClick={() => setFilterType('present')} disabled={spinning}>🟢 Presentes</button>
+                    <button className={`filter-btn ${filterType === 'all' ? 'active' : ''}`} onClick={() => {setFilterType('all'); setShowImport(false);}} disabled={spinning}>👥 Todos</button>
+                    <button className={`filter-btn ${filterType === 'new' ? 'active' : ''}`} onClick={() => {setFilterType('new'); setShowImport(false);}} disabled={spinning}>👶 Novos (Live)</button>
+                    <button className={`filter-btn ${filterType === 'present' ? 'active' : ''}`} onClick={() => {setFilterType('present'); setShowImport(false);}} disabled={spinning}>🟢 Presentes</button>
+                    <button className={`filter-btn ${filterType === 'custom' ? 'active' : ''}`} onClick={() => {setShowImport(true);}} disabled={spinning}>📋 Facebook / Lista</button>
                 </div>
+
+                {/* AREA DE IMPORTAÇÃO */}
+                {showImport && (
+                    <div className="import-container">
+                        <div style={{fontSize: '0.8rem', color: '#9ca3af', marginBottom: '0.5rem', textAlign: 'left'}}>
+                            Cole os nomes aqui (um por linha):
+                        </div>
+                        <textarea 
+                            className="import-textarea"
+                            value={importText}
+                            onChange={(e) => setImportText(e.target.value)}
+                            placeholder="Ex:&#10;Maria Silva&#10;João Souza&#10;Pedro Gamer"
+                        />
+                        <div className="import-actions">
+                            <button className="btn-sm" style={{background: '#1f2937', color: 'white', flex: 1}} onClick={() => setShowImport(false)}>Cancelar</button>
+                            <button className="btn-sm" style={{background: '#fbbf24', color: '#000', flex: 1}} onClick={handleImportList}>Carregar na Roleta</button>
+                        </div>
+                    </div>
+                )}
 
                 {/* PRIZE */}
                 <div className="modal-section-title">Prêmio</div>
                 <div className="prize-display">R$ {prize},00</div>
-                <input type="range" min="0" max="1000" step="50" value={prize} onChange={(e) => setPrize(Number(e.target.value))} className="custom-range" disabled={spinning}/>
+                <input type="range" min="0" max="1000" step="5" value={prize} onChange={(e) => setPrize(Number(e.target.value))} className="custom-range" disabled={spinning}/>
 
                 {/* ACTION BUTTON */}
                 {eligibleCount > 0 ? (
@@ -818,7 +1051,7 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
             </>
         ) : (
             /* RESULT VIEW */
-            <div style={{marginTop: '10rem', animation: 'fadeIn 0.5s'}}>
+            <div style={{marginTop: '25rem', animation: 'fadeIn 0.5s'}}>
                 <h2 style={{color: 'white', marginBottom:'0.5rem'}}>🎉 PARABÉNS! 🎉</h2>
                 <div style={{color: '#fbbf24', fontSize:'1.2rem', fontWeight:'bold', marginBottom:'1rem'}}>
                     R$ {prize},00
@@ -836,9 +1069,14 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
                     ))}
                 </div>
 
-                <button className="action-btn btn-primary" onClick={confirmResult}>
-                    CONFIRMAR & FECHAR
-                </button>
+                <div style={{display: 'flex', gap: '10px', marginTop: '1rem'}}>
+                    <button className="action-btn" style={{background: '#374151', color: 'white', fontSize: '0.9rem'}} onClick={() => setShowResults(false)}>
+                        🔄 Girar Novamente
+                    </button>
+                    <button className="action-btn btn-primary" style={{fontSize: '0.9rem'}} onClick={confirmResult}>
+                        CONFIRMAR & FECHAR
+                    </button>
+                </div>
             </div>
         )}
 
@@ -1012,6 +1250,16 @@ function AdminPage() {
   const [filter, setFilter] = useState("");
   const [showRoulette, setShowRoulette] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  
+  // LIVE STATE
+  const [activeLive, setActiveLive] = useState<LiveSession | null>(null);
+  const [timerStr, setTimerStr] = useState("00:00:00");
+  const [processingLive, setProcessingLive] = useState(false); // New state to prevent double clicks
+  const timerRef = useRef<any>(null);
+
+  // VIEW STATE
+  const [viewFilter, setViewFilter] = useState<'all' | 'new' | 'present'>('all');
 
   useEffect(() => {
     // Monitora estado de autenticação do Firebase
@@ -1023,57 +1271,137 @@ function AdminPage() {
     }
   }, []);
 
+  // Monitora Participantes
   useEffect(() => {
     if (user && db) {
-        // --- MUDANÇA PARA REALTIME ---
-        // Cria query
         // @ts-ignore
         const q = query(collection(db, "participantes"), orderBy("created_at", "desc"));
-        
-        // Inscreve no listener (onSnapshot)
         // @ts-ignore
         const unsubscribe = onSnapshot(q, (querySnapshot) => {
             const realData: Participant[] = [];
             querySnapshot.forEach((doc: any) => {
                 realData.push({ id: doc.id, ...doc.data() } as Participant);
             });
-            // Mantém os fakes apenas se quiser misturar, senão poderia ser só realData
             setParticipants([...realData, ...FAKE_PARTICIPANTS]);
             setError(null);
         }, (err: any) => {
-            console.error("Erro ao buscar participantes:", err);
-            if (err.message && (err.message.includes("Cloud Firestore API has not been used") || err.code === 'permission-denied')) {
-                setError("⚠️ A API do Firestore não está ativada. Acesse o Console do Firebase.");
-            } else {
-                setError("Erro realtime: " + err.message);
-            }
+            console.error(err);
+            setError("Erro ao conectar realtime");
         });
-
-        // Limpa listener ao desmontar
         return () => unsubscribe();
     } else {
-        // Fallback visual
         setParticipants(FAKE_PARTICIPANTS);
     }
   }, [user]);
 
+  // Monitora Lives Ativas
+  useEffect(() => {
+      if (user && db) {
+          // Busca live onde end_at == null
+          // @ts-ignore
+          const q = query(collection(db, "lives"), where("end_at", "==", null));
+          // @ts-ignore
+          const unsubscribe = onSnapshot(q, (snapshot) => {
+              if (!snapshot.empty) {
+                  const docData = snapshot.docs[0];
+                  setActiveLive({ id: docData.id, ...docData.data() } as LiveSession);
+              } else {
+                  setActiveLive(null);
+              }
+          });
+          return () => unsubscribe();
+      }
+  }, [user]);
+
+  // Timer Logic
+  useEffect(() => {
+    if (activeLive) {
+        const start = new Date(activeLive.start_at).getTime();
+        timerRef.current = setInterval(() => {
+            const now = Date.now();
+            const diff = now - start;
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            setTimerStr(
+                `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`
+            );
+        }, 1000);
+    } else {
+        clearInterval(timerRef.current);
+        setTimerStr("00:00:00");
+    }
+    return () => clearInterval(timerRef.current);
+  }, [activeLive]);
+
+  const toggleLive = async () => {
+      if (!db) {
+          alert("Banco de dados não conectado.");
+          return;
+      }
+      
+      try {
+          setProcessingLive(true);
+
+          if (activeLive) {
+              // ENCERRAR
+              if (!confirm("Tem certeza que deseja PARAR a live? O tempo será finalizado e o histórico salvo.")) {
+                  setProcessingLive(false);
+                  return;
+              }
+              
+              // Calcular participantes que marcaram presença durante a live
+              const startTime = new Date(activeLive.start_at);
+              const liveParticipants = participants.filter(p => {
+                  // Ignora fakes na contagem real
+                  if (p.id.startsWith('fake')) return false;
+                  
+                  // Verifica se created_at ou last_participation_at foi DEPOIS do inicio da live
+                  const created = new Date(p.created_at);
+                  const lastPart = p.last_participation_at ? new Date(p.last_participation_at) : created;
+                  
+                  return lastPart >= startTime;
+              }).length;
+
+              // @ts-ignore
+              await updateDoc(doc(db, "lives", activeLive.id), {
+                  end_at: new Date().toISOString(),
+                  participant_count: liveParticipants
+              });
+              
+              // Otimização: Remove estado ativo imediatamente para parar o timer visualmente
+              setActiveLive(null);
+          } else {
+              // INICIAR
+              // @ts-ignore
+              await addDoc(collection(db, "lives"), {
+                  start_at: new Date().toISOString(),
+                  end_at: null,
+                  participant_count: 0
+              });
+          }
+      } catch (error: any) {
+          console.error("Erro ao alternar live:", error);
+          alert("Erro ao alterar status da live: " + error.message);
+      } finally {
+          // Pequeno delay para evitar duplo clique visual
+          setTimeout(() => setProcessingLive(false), 500);
+      }
+  };
+
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Backdoor mantido para compatibilidade, mas agora usamos Auth real também
-    if (email === 'mimoso' && password === 'mimoso') {
+    if (email === 'mimoso' && password === 'mimosex2000') {
       setUser({ email: 'mimoso@admin.com', uid: 'fake-admin' });
       setLoading(false);
       return;
     }
-
     if (!auth) {
-        alert("Firebase Auth não configurado (chaves ausentes).");
+        alert("Firebase Auth não configurado.");
         setLoading(false);
         return;
     }
-
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error: any) {
@@ -1101,16 +1429,42 @@ function AdminPage() {
                 }
             }
         } catch (e) {
-            console.error("Erro ao atualizar vencedores", e);
-            alert("Erro ao salvar vencedores no banco. Verifique a conexão/permissões.");
+            console.error(e);
         }
     }
-    
-    // Atualiza lista local
     const winnerIds = winners.map(w => w.id);
     setParticipants(prev => prev.map(p => winnerIds.includes(p.id) ? {...p, sorteado: true} : p));
-
     setShowRoulette(false);
+  };
+
+  // CSV Export
+  const exportCSV = () => {
+    // Headers
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Nome,Email,Telefone,CPF,ID Plataforma,Participacoes,Data Cadastro,Status\n";
+
+    // Data - usa 'filtered' que já respeita os filtros de visualização (Novos/Presentes)
+    filtered.forEach(p => {
+        const row = [
+            `"${p.nome}"`,
+            p.email,
+            p.telefone,
+            p.cpf,
+            p.id_plataforma,
+            p.participation_count || 1,
+            new Date(p.created_at).toLocaleDateString(),
+            p.sorteado ? "Premiado" : "Pendente"
+        ].join(",");
+        csvContent += row + "\r\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `participantes_${viewFilter}_${new Date().toLocaleDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   if (!user) {
@@ -1128,23 +1482,33 @@ function AdminPage() {
     )
   }
 
+  // --- LOGICA DE FILTRO DA TABELA ---
   const eligibleCount = participants.filter(p => !p.sorteado).length;
   const winnerCount = participants.filter(p => p.sorteado).length;
-  // FILTRO ATUALIZADO: Inclui filtro por participação
-  const filtered = participants.filter(p => 
+  
+  let displayedParticipants = participants;
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  if (viewFilter === 'new') {
+      displayedParticipants = participants.filter(p => new Date(p.created_at) > oneDayAgo);
+  } else if (viewFilter === 'present') {
+      displayedParticipants = participants.filter(p => {
+          const lastActivity = p.last_participation_at ? new Date(p.last_participation_at) : new Date(p.created_at);
+          return lastActivity > oneDayAgo;
+      });
+  }
+
+  const filtered = displayedParticipants.filter(p => 
       p.nome.toLowerCase().includes(filter.toLowerCase()) || 
       p.cpf.includes(filter) || 
       p.id_plataforma.toLowerCase().includes(filter.toLowerCase()) ||
       (p.participation_count?.toString() || "1").includes(filter)
   );
 
-  // MANIPULADORES DE AÇÃO EM MASSA
   const handleMarkAll = async () => {
     if (!confirm(`Tem certeza que deseja marcar TODOS os ${filtered.length} participantes listados como PREMIADOS?`)) return;
-    
     const idsToUpdate = filtered.map(p => p.id);
     setParticipants(prev => prev.map(p => idsToUpdate.includes(p.id) ? { ...p, sorteado: true } : p));
-
     if (db) {
         for (const p of filtered) {
              if (!p.id.startsWith('fake-') && !p.sorteado) {
@@ -1159,10 +1523,8 @@ function AdminPage() {
 
   const handleClearAll = async () => {
      if (!confirm(`Tem certeza que deseja LIMPAR o status de sorteio de TODOS os ${filtered.length} participantes listados?`)) return;
-     
      const idsToUpdate = filtered.map(p => p.id);
      setParticipants(prev => prev.map(p => idsToUpdate.includes(p.id) ? { ...p, sorteado: false } : p));
-     
      if (db) {
         for (const p of filtered) {
              if (!p.id.startsWith('fake-') && p.sorteado) {
@@ -1177,13 +1539,17 @@ function AdminPage() {
 
   return (
     <div>
-      {/* MODAL ROLETA */}
+      {/* MODALS */}
       {showRoulette && (
           <RouletteModal 
             participants={participants}
             onClose={() => setShowRoulette(false)}
             onFinish={onRouletteFinish}
           />
+      )}
+
+      {showHistory && (
+          <HistoryModal onClose={() => setShowHistory(false)} />
       )}
 
       {/* ERROR BANNER */}
@@ -1197,21 +1563,33 @@ function AdminPage() {
       <div className="admin-header-bar">
         <div className="live-status">
           <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-             <span className="live-badge">AO VIVO</span>
+             <span className={`live-badge ${activeLive ? '' : 'off'}`}>
+                 {activeLive ? 'AO VIVO' : 'OFFLINE'}
+             </span>
              {/* Indicador de Realtime */}
-             {db && (
+             {db && activeLive && (
                  <div className="realtime-indicator">
                      <div className="pulsing-dot"></div>
-                     <span>Sincronização Ativa</span>
+                     <span>Transmissão Ativa</span>
                  </div>
              )}
           </div>
-          <h1 className="page-title">Sorteio Em Andamento</h1>
-          <p className="page-subtitle">Os cadastros aparecem automaticamente na lista abaixo.</p>
+          <h1 className="page-title">Painel de Controle</h1>
+          <p className="page-subtitle">Gerencie o sorteio e visualize cadastros em tempo real.</p>
         </div>
         <div className="admin-actions">
+          {activeLive && <div className="timer-display">{timerStr}</div>}
+          
+          <button 
+            className={`btn-top ${activeLive ? 'btn-red' : 'btn-green'}`} 
+            onClick={toggleLive}
+            disabled={processingLive}
+            style={processingLive ? {opacity: 0.7, cursor: 'not-allowed'} : {}}
+          >
+              {processingLive ? 'Processando...' : (activeLive ? '⏹ Parar Live' : '▶ Iniciar Live')}
+          </button>
+          
           <button className="btn-top btn-dark" onClick={handleLogout}>Sair</button>
-          <button className="btn-top btn-red">⏹ Encerrar Live</button>
           <button className="btn-top btn-green" onClick={() => setShowRoulette(true)}>🎲 Abrir Roleta</button>
         </div>
       </div>
@@ -1233,9 +1611,9 @@ function AdminPage() {
            <span className="stat-number" style={{color:'#f59e0b'}}>{winnerCount}</span>
            <div className="stat-icon" style={{color:'#f59e0b'}}>🏆</div>
         </div>
-        <div className="stat-box">
-           <span className="stat-label">Total de Lives</span>
-           <span className="stat-number">128</span>
+        <div className="stat-box clickable" onClick={() => setShowHistory(true)}>
+           <span className="stat-label">Histórico de Lives (Ver)</span>
+           <span className="stat-number" style={{fontSize: '1.5rem'}}>Ver Relatórios</span>
            <div className="stat-icon" style={{color:'#ec4899'}}>🎁</div>
         </div>
       </div>
@@ -1243,22 +1621,25 @@ function AdminPage() {
       {/* Data Section */}
       <div className="data-area">
         <div className="filter-bar">
-           <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
-              <h3 style={{color:'white', fontSize:'1rem', marginRight:'1rem'}}>Cadastros ({participants.length})</h3>
-              <input className="search-input" placeholder="Buscar por nome, CPF, ID ou Nº de Lives..." value={filter} onChange={e=>setFilter(e.target.value)} />
+           <div className="table-tabs">
+                <button className={`tab-btn ${viewFilter === 'all' ? 'active' : ''}`} onClick={() => setViewFilter('all')}>Todos</button>
+                <button className={`tab-btn ${viewFilter === 'new' ? 'active' : ''}`} onClick={() => setViewFilter('new')}>Novos (Hoje)</button>
+                <button className={`tab-btn ${viewFilter === 'present' ? 'active' : ''}`} onClick={() => setViewFilter('present')}>Presentes (Hoje)</button>
            </div>
-           <div>
-              <button className="btn-top btn-dark" style={{fontSize:'0.7rem', padding: '0.5rem 1rem'}}>📥 Exportar CSV</button>
+           
+           <div style={{display:'flex', gap:'10px', alignItems:'center'}}>
+              <input className="search-input" placeholder="Buscar..." value={filter} onChange={e=>setFilter(e.target.value)} />
+              <button className="btn-top btn-dark" onClick={exportCSV} style={{fontSize:'0.7rem', padding: '0.5rem 1rem'}}>📥 CSV</button>
            </div>
         </div>
 
         {/* BULK ACTIONS */}
         <div className="bulk-actions">
             <button className="btn-sm" style={{background: '#21262d', color: '#f59e0b', border: '1px solid #f59e0b'}} onClick={handleMarkAll}>
-                👑 Marcar todos como premiados
+                👑 Marcar listados como premiados
             </button>
             <button className="btn-sm" style={{background: '#21262d', color: '#ef4444', border: '1px solid #ef4444'}} onClick={handleClearAll}>
-                🗑️ Limpar todos os sorteados
+                🗑️ Limpar listados
             </button>
         </div>
 
@@ -1272,7 +1653,7 @@ function AdminPage() {
                 <th>CPF</th>
                 <th>Data de Cadastro</th>
                 <th>Participações</th>
-                <th>Status de Prêmio</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
