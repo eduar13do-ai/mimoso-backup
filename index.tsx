@@ -1,8 +1,8 @@
-// Fix Build Netlify v1.1.0 - Improved Stop Live Logic
-import { useState, useEffect, useRef, FormEvent } from "react";
+// Fix Black Screen & UI Layout - Stable v1.8.0
+import React, { Component, useState, useEffect, useRef, FormEvent, ErrorInfo, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 // @ts-ignore
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 // @ts-ignore
 import { 
   getFirestore, 
@@ -25,9 +25,50 @@ import {
   onAuthStateChanged 
 } from "firebase/auth";
 
+// --- ERROR BOUNDARY (Evita Tela Preta) ---
+interface ErrorBoundaryProps {
+  children?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: string;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = {
+    hasError: false,
+    error: ""
+  };
+
+  static getDerivedStateFromError(error: any): ErrorBoundaryState {
+    return { hasError: true, error: error.toString() };
+  }
+
+  componentDidCatch(error: any, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{padding: "2rem", color: "white", textAlign: "center", background: "#02040a", height: "100vh"}}>
+          <h1>Algo deu errado.</h1>
+          <p>Ocorreu um erro ao renderizar a aplicação.</p>
+          <pre style={{color: "#ef4444", marginTop: "1rem", whiteSpace: 'pre-wrap'}}>{this.state.error}</pre>
+          <button onClick={() => window.location.reload()} style={{marginTop: "1rem", padding: "10px 20px", cursor: "pointer"}}>
+            Recarregar Página
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- CONFIGURAÇÃO DO FIREBASE ---
 const firebaseConfig = {
-  apiKey: "AIzaSyClXYg4fERlzIy-YjacJ7K0CtIwthHGGig",
+  apiKey: "AIzaSyClXYg4fERlzIy-YjacJ7K0CtIwthHGGig", // <--- TROCAR PELA SUA NOVA API KEY
   authDomain: "mimoso-test-console.firebaseapp.com",
   projectId: "mimoso-test-console",
   storageBucket: "mimoso-test-console.firebasestorage.app",
@@ -35,10 +76,30 @@ const firebaseConfig = {
   appId: "1:278829716578:web:b2c64463ffc0f644a6ad3b"
 };
 
-// Inicializa Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
+// Inicializa Firebase com tratamento de erro e SINGLETON pattern
+let app = null, db = null, auth = null;
+let firebaseError: string | null = null;
+
+try {
+  if (!getApps().length) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
+  }
+  
+  if (app) {
+      try {
+        db = getFirestore(app);
+        auth = getAuth(app);
+      } catch (serviceError: any) {
+        console.warn("Erro ao carregar serviços do Firebase:", serviceError);
+        firebaseError = "Erro nos serviços do banco de dados.";
+      }
+  }
+} catch (e: any) {
+  console.error("Erro crítico ao inicializar Firebase:", e);
+  firebaseError = e.message || "Falha na conexão com o Banco de Dados";
+}
 
 // --- TIPOS ---
 interface Participant {
@@ -58,7 +119,7 @@ interface LiveSession {
   id: string;
   start_at: string;
   end_at: string | null;
-  participant_count: number; // Quantos participaram/cadastraram durante a live
+  participant_count: number;
 }
 
 // --- DADOS FAKES (PARA VISUALIZAÇÃO) ---
@@ -132,6 +193,7 @@ body {
 .admin-header-bar {
   display: flex; justify-content: space-between; align-items: flex-start;
   padding: 2rem 5%; margin-bottom: 2rem;
+  position: relative; z-index: 40;
 }
 .live-status { display: flex; flex-direction: column; gap: 0.5rem; }
 .live-badge {
@@ -143,7 +205,6 @@ body {
 .page-title { font-size: 2rem; font-weight: 800; color: #fff; margin: 0; }
 .page-subtitle { color: var(--text-muted); font-size: 0.9rem; }
 
-/* Pulsing Dot for Realtime */
 .realtime-indicator {
     display: flex; align-items: center; gap: 6px; font-size: 0.75rem; 
     color: var(--admin-green); background: rgba(16, 185, 129, 0.1); 
@@ -159,11 +220,41 @@ body {
     100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-.admin-actions { display: flex; gap: 1rem; align-items: center; }
+.admin-actions { display: flex; gap: 1rem; align-items: center; position: relative; z-index: 50; }
 .timer-display {
   font-family: monospace; font-size: 1.2rem; font-weight: bold; color: var(--primary);
   background: #1f2937; padding: 0.5rem 1rem; border-radius: 6px; border: 1px solid #374151;
 }
+
+/* ESTILO PREMIUM PARA O TÍTULO MIMOSO */
+.mimoso-brand {
+  font-size: 2.5rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-right: 1.5rem;
+  
+  /* Gradient text effect */
+  background: linear-gradient(90deg, #fbbf24, #f59e0b, #ef4444, #f59e0b, #fbbf24);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  
+  /* Animation */
+  animation: shine 4s linear infinite;
+  
+  /* Glow/Shadow */
+  filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.4));
+}
+
+@keyframes shine {
+  to {
+    background-position: 200% center;
+  }
+}
+
 .btn-top {
   padding: 0.75rem 1.5rem; border-radius: 6px; border: none; font-weight: 700; cursor: pointer;
   text-transform: uppercase; display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem;
@@ -297,39 +388,75 @@ body {
   padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; font-family: monospace; 
 }
 
-/* --- ROULETTE MODAL STYLES --- */
+/* --- ROULETTE MODAL STYLES (SIDE BY SIDE) --- */
 .modal-overlay {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background: rgba(0,0,0,0.92); backdrop-filter: blur(8px);
-  z-index: 100; display: flex; align-items: center; justify-content: center;
+  z-index: 100; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  overflow-y: auto;
+  padding: 2rem;
 }
 
 .modal-content {
   background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
   border: 1px solid #30363d;
   border-radius: 24px;
-  width: 90%; max-width: 420px;
-  padding: 0 2rem 2rem 2rem;
-  text-align: center;
+  width: 100%; max-width: 1100px;
+  padding: 3rem;
   position: relative;
-  box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.7);
-  margin-top: 100px;
+  box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: row;
+  gap: 4rem;
+  align-items: center;
+  justify-content: center;
   transition: all 0.3s;
 }
 
+@media (max-width: 1024px) {
+  .modal-content {
+    flex-direction: column;
+    gap: 2rem;
+    padding: 2rem 1rem;
+    max-width: 500px;
+    margin: auto;
+  }
+}
+
+.wheel-column {
+    flex-shrink: 0;
+    position: relative;
+    width: 500px; height: 500px;
+    display: flex; align-items: center; justify-content: center;
+}
+
+@media (max-width: 600px) {
+    .wheel-column {
+        width: 350px; height: 350px;
+    }
+}
+
+.controls-column {
+    flex: 1;
+    width: 100%;
+    max-width: 450px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
 .wheel-container {
-  position: absolute;
-  top: -250px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 600px;
-  height: 600px;
+  position: relative; 
+  width: 100%; height: 100%;
   z-index: 10;
   pointer-events: none;
   filter: drop-shadow(0 0 40px rgba(251, 191, 36, 0.15));
 }
 
-/* POINTERS CONTAINER FOR MULTIPLE ARROWS */
 .pointers-layer {
     position: absolute;
     top: 0; left: 0; width: 100%; height: 100%;
@@ -349,7 +476,6 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: 40px; height: 50px;
-  /* Complex pointer shape */
   filter: drop-shadow(0 4px 4px rgba(0,0,0,0.6));
 }
 .wheel-pointer::before {
@@ -372,9 +498,7 @@ body {
   position: relative;
   overflow: hidden;
   transition: transform 5s cubic-bezier(0.15, 0.85, 0.35, 1);
-  
-  /* Metallic Rim Effect */
-  padding: 12px; /* Rim thickness */
+  padding: 12px; 
   background-image: linear-gradient(135deg, #b45309 0%, #fcd34d 25%, #b45309 50%, #fcd34d 75%, #b45309 100%);
   box-shadow: 0 20px 30px rgba(0,0,0,0.5), inset 0 0 15px rgba(0,0,0,0.8);
 }
@@ -389,16 +513,14 @@ body {
   background: #1f2937;
 }
 
-/* Background Slices */
 .wheel-surface {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  /* Conic gradient is now inline to support dynamic segments */
 }
 
 .wheel-text-slot {
   position: absolute;
   top: 50%; left: 50%;
-  width: 42%; height: 0px; /* Zero height, used for rotation origin */
+  width: 42%; height: 0px; 
   transform-origin: 0% 50%;
   display: flex;
   align-items: center;
@@ -419,7 +541,6 @@ body {
   width: 60px; height: 60px;
   border-radius: 50%;
   z-index: 21;
-  /* Metallic Knob */
   background: radial-gradient(circle at 30% 30%, #fcd34d, #b45309, #451a03);
   box-shadow: 0 5px 15px rgba(0,0,0,0.5), inset 0 0 5px rgba(255,255,255,0.3);
   border: 2px solid #78350f;
@@ -446,7 +567,8 @@ body {
   display: flex;
   justify-content: center;
   gap: 0.5rem;
-  margin-top: 8rem; /* Space for wheel overlap */
+  margin-top: 1rem;
+  flex-wrap: wrap;
 }
 
 .filter-btn {
@@ -534,9 +656,8 @@ body {
   display: flex; gap: 0.5rem; margin-top: 0.5rem;
 }
 
-/* Winner List Animation */
 .winner-list-container {
-  max-height: 200px; overflow-y: auto; text-align: left;
+  max-height: 200px; overflow-y: auto; text-align: left; width: 100%;
   background: rgba(0,0,0,0.3); border-radius: 8px; padding: 1rem;
   margin-bottom: 1rem;
 }
@@ -546,24 +667,10 @@ body {
 }
 @keyframes fadeIn { to { opacity: 1; } }
 
-/* Canvas Confetti */
 .confetti-canvas {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 9999;
 }
 
-/* MISSING CONFIG OVERLAY */
-.config-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: #02040a; z-index: 9999;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column;
-}
-.config-card {
-    background: #0d1117; padding: 2rem; border-radius: 12px; border: 1px solid #30363d;
-    max-width: 500px; text-align: center;
-}
-
-/* History Modal */
 .history-table {
   width: 100%; border-collapse: collapse; margin-top: 1rem;
 }
@@ -571,59 +678,70 @@ body {
 .history-table td { padding: 0.75rem 0; color: #e6edf3; font-size: 0.9rem; border-bottom: 1px solid #21262d; }
 `;
 
-// --- COMPONENTES ---
-
 function Confetti() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    // Set canvas to full screen
+    const resize = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
 
     const particles: any[] = [];
     const colors = ['#fbbf24', '#ef4444', '#10b981', '#3b82f6', '#8b5cf6'];
 
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 150; i++) {
       particles.push({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-        w: Math.random() * 10 + 5,
-        h: Math.random() * 10 + 5,
-        vx: (Math.random() - 0.5) * 20,
-        vy: (Math.random() - 0.5) * 20,
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height - canvas.height,
         color: colors[Math.floor(Math.random() * colors.length)],
-        rotation: Math.random() * 360,
-        dr: (Math.random() - 0.5) * 10,
-        gravity: 0.2
+        size: Math.random() * 10 + 5,
+        speedY: Math.random() * 3 + 2,
+        speedX: Math.random() * 2 - 1,
+        rotation: Math.random() * 360
       });
     }
 
     let animationId: number;
-    const render = () => {
+    function animate() {
+      if (!ctx || !canvas) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += p.gravity;
-        p.rotation += p.dr;
+      
+      particles.forEach(p => {
+        p.y += p.speedY;
+        p.x += p.speedX;
+        p.rotation += 5;
+        
+        if (p.y > canvas.height) {
+             p.y = -20;
+             p.x = Math.random() * canvas.width;
+        }
         
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate((p.rotation * Math.PI) / 180);
         ctx.fillStyle = p.color;
-        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
         ctx.restore();
       });
-      animationId = requestAnimationFrame(render);
+      
+      animationId = requestAnimationFrame(animate);
+    }
+    
+    animate();
+    return () => {
+        cancelAnimationFrame(animationId);
+        window.removeEventListener('resize', resize);
     };
-    render();
-
-    return () => cancelAnimationFrame(animationId);
   }, []);
 
   return <canvas ref={canvasRef} className="confetti-canvas" />;
@@ -703,18 +821,20 @@ function HistoryModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{maxWidth: '600px', textAlign: 'left'}}>
-        <h2 style={{color: 'white', marginBottom: '0.5rem'}}>Histórico de Lives</h2>
-        <p style={{color: '#8b949e', fontSize: '0.9rem', marginBottom: '1.5rem'}}>
-          Registro das últimas sessões realizadas.
-        </p>
+      <div className="modal-content" style={{maxWidth: '600px', flexDirection: 'column', gap: '1rem'}}>
+        <div style={{width: '100%', textAlign: 'left'}}>
+            <h2 style={{color: 'white', marginBottom: '0.5rem'}}>Histórico de Lives</h2>
+            <p style={{color: '#8b949e', fontSize: '0.9rem', marginBottom: '1.5rem'}}>
+            Registro das últimas sessões realizadas.
+            </p>
+        </div>
 
         {loading ? (
           <div style={{color: 'white', textAlign: 'center', padding: '2rem'}}>Carregando...</div>
         ) : history.length === 0 ? (
            <div style={{color: '#8b949e', textAlign: 'center', padding: '2rem'}}>Nenhum histórico encontrado.</div>
         ) : (
-          <div style={{maxHeight: '400px', overflowY: 'auto'}}>
+          <div style={{maxHeight: '400px', overflowY: 'auto', width: '100%'}}>
             <table className="history-table">
               <thead>
                 <tr>
@@ -823,6 +943,8 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
     
     if (shuffled.length > 0) {
         setSegmentAngle(360 / shuffled.length);
+    } else {
+        setSegmentAngle(0);
     }
   }, [filterType, participants, customParticipants]);
 
@@ -848,6 +970,7 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
 
   const handleSpin = () => {
     if (wheelSegments.length === 0) return;
+    if (segmentAngle === 0) return; // Prevent division by zero crash
 
     setSpinning(true);
     setShowResults(false);
@@ -903,7 +1026,9 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
             
             // Proteção contra index out of bounds (arredondamento)
             const safeIndex = winnerIndex % wheelSegments.length;
-            currentWinners.push(wheelSegments[safeIndex]);
+            if (wheelSegments[safeIndex]) {
+                 currentWinners.push(wheelSegments[safeIndex]);
+            }
         }
 
         setDrawnWinners(currentWinners);
@@ -950,135 +1075,138 @@ function RouletteModal({ onClose, participants, onFinish }: RouletteModalProps) 
       
       <div className="modal-content">
         
-        {/* WHEEL SECTION */}
-        <div className="wheel-container">
-            {/* DYNAMIC POINTERS */}
-            <div className="pointers-layer">
-                {Array.from({ length: winnerCount }).map((_, i) => (
-                    <div 
-                        key={i} 
-                        className="wheel-pointer-wrapper" 
-                        style={{ transform: `rotate(${i * (360 / winnerCount)}deg)` }}
-                    >
-                        <div className="wheel-pointer"></div>
-                    </div>
-                ))}
-            </div>
-
-            <div className="wheel-rotate" style={{ transform: `rotate(${rotation}deg)` }}>
-                {/* Borda interna e Fundo */}
-                <div className="wheel-inner-border">
-                    <div className="wheel-surface" style={{ background: generateGradient() }}></div>
-                    
-                    {/* Renderizar Textos dos Segmentos */}
-                    {wheelSegments.map((seg, i) => (
+        {/* WHEEL SECTION (LEFT COLUMN) */}
+        <div className="wheel-column">
+            <div className="wheel-container">
+                {/* DYNAMIC POINTERS */}
+                <div className="pointers-layer">
+                    {Array.from({ length: winnerCount }).map((_, i) => (
                         <div 
                             key={i} 
-                            className="wheel-text-slot"
-                            style={{ 
-                                transform: `rotate(${i * segmentAngle + (segmentAngle/2)}deg)`, // Center text in slice
-                                height: '0px', // Origin point
-                                fontSize: getFontSize()
-                            }} 
+                            className="wheel-pointer-wrapper" 
+                            style={{ transform: `rotate(${i * (360 / winnerCount)}deg)` }}
                         >
-                            {/* Truncate long names if many segments */}
-                            {wheelSegments.length > 30 ? seg.nome.substring(0, 10) + '..' : seg.nome.split(' ')[0]}
+                            <div className="wheel-pointer"></div>
                         </div>
                     ))}
                 </div>
+
+                <div className="wheel-rotate" style={{ transform: `rotate(${rotation}deg)` }}>
+                    {/* Borda interna e Fundo */}
+                    <div className="wheel-inner-border">
+                        <div className="wheel-surface" style={{ background: generateGradient() }}></div>
+                        
+                        {/* Renderizar Textos dos Segmentos */}
+                        {wheelSegments.map((seg, i) => (
+                            <div 
+                                key={i} 
+                                className="wheel-text-slot"
+                                style={{ 
+                                    transform: `rotate(${i * segmentAngle + (segmentAngle/2)}deg)`, // Center text in slice
+                                    height: '0px', // Origin point
+                                    fontSize: getFontSize()
+                                }} 
+                            >
+                                {/* Truncate long names if many segments */}
+                                {wheelSegments.length > 30 ? seg.nome.substring(0, 10) + '..' : seg.nome.split(' ')[0]}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="wheel-hub"></div>
             </div>
-            <div className="wheel-hub"></div>
         </div>
 
-        {/* CONTROLS (Hide during result view to focus on winner) */}
-        {!showResults ? (
-            <>
-                {/* Aumentei a margin-top para 17rem para a roleta não sobrepor */}
-                <div className="modal-section-title" style={{marginTop: '24rem'}}>Configuração</div>
-                
-                {/* Qtd Vencedores */}
-                <div style={{display:'flex', justifyContent:'center', marginBottom:'1rem'}}>
-                    <div className="count-control">
-                        <span style={{color:'#9ca3af', fontSize:'0.75rem', marginRight:'5px'}}>SORTEAR:</span>
-                        <button className="count-btn" onClick={() => setWinnerCount(Math.max(1, winnerCount - 1))}>-</button>
-                        <span className="count-display">{winnerCount}</span>
-                        <button className="count-btn" onClick={() => setWinnerCount(Math.min(10, winnerCount + 1))}>+</button>
-                        <span style={{color:'#9ca3af', fontSize:'0.75rem', marginLeft:'5px'}}>PESSOAS</span>
-                    </div>
-                </div>
-
-                <div className="filter-group" style={{marginTop:'0'}}>
-                    <button className={`filter-btn ${filterType === 'all' ? 'active' : ''}`} onClick={() => {setFilterType('all'); setShowImport(false);}} disabled={spinning}>👥 Todos</button>
-                    <button className={`filter-btn ${filterType === 'new' ? 'active' : ''}`} onClick={() => {setFilterType('new'); setShowImport(false);}} disabled={spinning}>👶 Novos (Live)</button>
-                    <button className={`filter-btn ${filterType === 'present' ? 'active' : ''}`} onClick={() => {setFilterType('present'); setShowImport(false);}} disabled={spinning}>🟢 Presentes</button>
-                    <button className={`filter-btn ${filterType === 'custom' ? 'active' : ''}`} onClick={() => {setShowImport(true);}} disabled={spinning}>📋 Facebook / Lista</button>
-                </div>
-
-                {/* AREA DE IMPORTAÇÃO */}
-                {showImport && (
-                    <div className="import-container">
-                        <div style={{fontSize: '0.8rem', color: '#9ca3af', marginBottom: '0.5rem', textAlign: 'left'}}>
-                            Cole os nomes aqui (um por linha):
-                        </div>
-                        <textarea 
-                            className="import-textarea"
-                            value={importText}
-                            onChange={(e) => setImportText(e.target.value)}
-                            placeholder="Ex:&#10;Maria Silva&#10;João Souza&#10;Pedro Gamer"
-                        />
-                        <div className="import-actions">
-                            <button className="btn-sm" style={{background: '#1f2937', color: 'white', flex: 1}} onClick={() => setShowImport(false)}>Cancelar</button>
-                            <button className="btn-sm" style={{background: '#fbbf24', color: '#000', flex: 1}} onClick={handleImportList}>Carregar na Roleta</button>
+        {/* CONTROLS (RIGHT COLUMN) */}
+        <div className="controls-column">
+            {!showResults ? (
+                <>
+                    <div className="modal-section-title" style={{marginTop: 0}}>Configuração</div>
+                    
+                    {/* Qtd Vencedores */}
+                    <div style={{display:'flex', justifyContent:'center', marginBottom:'1rem'}}>
+                        <div className="count-control">
+                            <span style={{color:'#9ca3af', fontSize:'0.75rem', marginRight:'5px'}}>SORTEAR:</span>
+                            <button className="count-btn" onClick={() => setWinnerCount(Math.max(1, winnerCount - 1))}>-</button>
+                            <span className="count-display">{winnerCount}</span>
+                            <button className="count-btn" onClick={() => setWinnerCount(Math.min(10, winnerCount + 1))}>+</button>
+                            <span style={{color:'#9ca3af', fontSize:'0.75rem', marginLeft:'5px'}}>PESSOAS</span>
                         </div>
                     </div>
-                )}
 
-                {/* PRIZE */}
-                <div className="modal-section-title">Prêmio</div>
-                <div className="prize-display">R$ {prize},00</div>
-                <input type="range" min="0" max="1000" step="5" value={prize} onChange={(e) => setPrize(Number(e.target.value))} className="custom-range" disabled={spinning}/>
+                    <div className="filter-group" style={{marginTop:'0'}}>
+                        <button className={`filter-btn ${filterType === 'all' ? 'active' : ''}`} onClick={() => {setFilterType('all'); setShowImport(false);}} disabled={spinning}>👥 Todos</button>
+                        <button className={`filter-btn ${filterType === 'new' ? 'active' : ''}`} onClick={() => {setFilterType('new'); setShowImport(false);}} disabled={spinning}>👶 Novos</button>
+                        <button className={`filter-btn ${filterType === 'present' ? 'active' : ''}`} onClick={() => {setFilterType('present'); setShowImport(false);}} disabled={spinning}>🟢 Presentes</button>
+                        <button className={`filter-btn ${filterType === 'custom' ? 'active' : ''}`} onClick={() => {setShowImport(true);}} disabled={spinning}>📋 Lista</button>
+                    </div>
 
-                {/* ACTION BUTTON */}
-                {eligibleCount > 0 ? (
-                    <button className="action-btn btn-primary" onClick={handleSpin} disabled={spinning}>
-                        {spinning ? 'GIRANDO...' : `GIRAR (${eligibleCount} participantes)`}
-                    </button>
-                ) : (
-                    <button className="action-btn btn-disabled" disabled>NINGUÉM ELEGÍVEL</button>
-                )}
-                
-                <a className="cancel-link" onClick={!spinning ? onClose : undefined}>Cancelar</a>
-            </>
-        ) : (
-            /* RESULT VIEW */
-            <div style={{marginTop: '25rem', animation: 'fadeIn 0.5s'}}>
-                <h2 style={{color: 'white', marginBottom:'0.5rem'}}>🎉 PARABÉNS! 🎉</h2>
-                <div style={{color: '#fbbf24', fontSize:'1.2rem', fontWeight:'bold', marginBottom:'1rem'}}>
-                    R$ {prize},00
-                </div>
-
-                <div className="winner-list-container">
-                    {drawnWinners.map((winner, idx) => (
-                        <div key={idx} className="winner-item" style={{animationDelay: `${idx * 0.2}s`}}>
-                            <div>
-                                <div style={{color:'white', fontWeight:'bold'}}>{winner.nome}</div>
-                                <div style={{fontSize:'0.75rem', color:'#9ca3af'}}>{winner.id_plataforma}</div>
+                    {/* AREA DE IMPORTAÇÃO */}
+                    {showImport && (
+                        <div className="import-container" style={{width: '100%'}}>
+                            <div style={{fontSize: '0.8rem', color: '#9ca3af', marginBottom: '0.5rem', textAlign: 'left'}}>
+                                Cole os nomes aqui (um por linha):
                             </div>
-                            <div style={{color:'#10b981', fontWeight:'bold'}}>#{idx+1}</div>
+                            <textarea 
+                                className="import-textarea"
+                                value={importText}
+                                onChange={(e) => setImportText(e.target.value)}
+                                placeholder="Ex:&#10;Maria Silva&#10;João Souza&#10;Pedro Gamer"
+                            />
+                            <div className="import-actions">
+                                <button className="btn-sm" style={{background: '#1f2937', color: 'white', flex: 1}} onClick={() => setShowImport(false)}>Cancelar</button>
+                                <button className="btn-sm" style={{background: '#fbbf24', color: '#000', flex: 1}} onClick={handleImportList}>Carregar</button>
+                            </div>
                         </div>
-                    ))}
-                </div>
+                    )}
 
-                <div style={{display: 'flex', gap: '10px', marginTop: '1rem'}}>
-                    <button className="action-btn" style={{background: '#374151', color: 'white', fontSize: '0.9rem'}} onClick={() => setShowResults(false)}>
-                        🔄 Girar Novamente
-                    </button>
-                    <button className="action-btn btn-primary" style={{fontSize: '0.9rem'}} onClick={confirmResult}>
-                        CONFIRMAR & FECHAR
-                    </button>
+                    {/* PRIZE */}
+                    <div className="modal-section-title">Prêmio</div>
+                    <div className="prize-display">R$ {prize},00</div>
+                    <input type="range" min="0" max="1000" step="5" value={prize} onChange={(e) => setPrize(Number(e.target.value))} className="custom-range" disabled={spinning}/>
+
+                    {/* ACTION BUTTON */}
+                    {eligibleCount > 0 ? (
+                        <button className="action-btn btn-primary" onClick={handleSpin} disabled={spinning}>
+                            {spinning ? 'GIRANDO...' : `GIRAR (${eligibleCount})`}
+                        </button>
+                    ) : (
+                        <button className="action-btn btn-disabled" disabled>NINGUÉM ELEGÍVEL</button>
+                    )}
+                    
+                    <a className="cancel-link" onClick={!spinning ? onClose : undefined}>Cancelar</a>
+                </>
+            ) : (
+                /* RESULT VIEW */
+                <div style={{marginTop: 0, animation: 'fadeIn 0.5s', width: '100%'}}>
+                    <h2 style={{color: 'white', marginBottom:'0.5rem'}}>🎉 PARABÉNS! 🎉</h2>
+                    <div style={{color: '#fbbf24', fontSize:'1.2rem', fontWeight:'bold', marginBottom:'1rem'}}>
+                        R$ {prize},00
+                    </div>
+
+                    <div className="winner-list-container">
+                        {drawnWinners.map((winner, idx) => (
+                            <div key={idx} className="winner-item" style={{animationDelay: `${idx * 0.2}s`}}>
+                                <div>
+                                    <div style={{color:'white', fontWeight:'bold'}}>{winner.nome}</div>
+                                    <div style={{fontSize:'0.75rem', color:'#9ca3af'}}>{winner.id_plataforma}</div>
+                                </div>
+                                <div style={{color:'#10b981', fontWeight:'bold'}}>#{idx+1}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={{display: 'flex', gap: '10px', marginTop: '1rem', width: '100%'}}>
+                        <button className="action-btn" style={{background: '#374151', color: 'white', fontSize: '0.9rem'}} onClick={() => setShowResults(false)}>
+                            🔄 Girar Novamente
+                        </button>
+                        <button className="action-btn btn-primary" style={{fontSize: '0.9rem'}} onClick={confirmResult}>
+                            CONFIRMAR
+                        </button>
+                    </div>
                 </div>
-            </div>
-        )}
+            )}
+        </div>
 
       </div>
     </div>
@@ -1095,6 +1223,12 @@ function UserPage() {
     e.preventDefault();
     setLoading(true);
     
+    if (!db) {
+        alert("Erro: Banco de dados não conectado. Verifique se criou seu projeto no Firebase Console.");
+        setLoading(false);
+        return;
+    }
+
     const formData = new FormData(e.currentTarget);
     const data = {
       nome: formData.get("nome") as string,
@@ -1182,13 +1316,20 @@ function UserPage() {
         <div className="form-card">
           <div className="form-title">Cadastrar-se no sorteio</div>
           <p className="form-desc">Preencha com atenção. Usaremos esses dados para validar o ganhador.</p>
+          
+          {firebaseError && (
+              <div style={{padding: '1rem', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.8rem'}}>
+                  ⚠️ <b>Modo Demonstração (Sem Banco):</b> {firebaseError} <br/>
+                  Crie um projeto no Firebase Console e troque as chaves no código.
+              </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <div className="input-group">
               <label className="input-label">Nome Completo *</label>
               <div className="input-wrapper">
                 <span className="input-icon">👤</span>
-                <input name="nome" className="custom-input" placeholder="Seu nome completo" required />
+                <input name="nome" className="custom-input" placeholder="Seu nome completo" required disabled={!!firebaseError} />
               </div>
             </div>
 
@@ -1196,7 +1337,7 @@ function UserPage() {
               <label className="input-label">WhatsApp (Com DDD) *</label>
               <div className="input-wrapper">
                 <span className="input-icon">📱</span>
-                <input name="telefone" className="custom-input" placeholder="(11) 99999-9999" required />
+                <input name="telefone" className="custom-input" placeholder="(11) 99999-9999" required disabled={!!firebaseError} />
               </div>
             </div>
 
@@ -1204,7 +1345,7 @@ function UserPage() {
               <label className="input-label">ID / Usuário da Plataforma *</label>
               <div className="input-wrapper">
                 <span className="input-icon">🎮</span>
-                <input name="id_plataforma" className="custom-input" placeholder="Seu ID na plataforma" required />
+                <input name="id_plataforma" className="custom-input" placeholder="Seu ID na plataforma" required disabled={!!firebaseError} />
               </div>
             </div>
 
@@ -1213,25 +1354,25 @@ function UserPage() {
                 <label className="input-label">CPF *</label>
                 <div className="input-wrapper">
                     <span className="input-icon">#</span>
-                    <input name="cpf" className="custom-input" placeholder="000.000.000-00" required />
+                    <input name="cpf" className="custom-input" placeholder="000.000.000-00" required disabled={!!firebaseError} />
                 </div>
                 </div>
                 <div className="input-group">
                 <label className="input-label">Email</label>
                 <div className="input-wrapper">
                     <span className="input-icon">@</span>
-                    <input name="email" type="email" className="custom-input" placeholder="email@exemplo.com" required />
+                    <input name="email" type="email" className="custom-input" placeholder="email@exemplo.com" required disabled={!!firebaseError} />
                 </div>
                 </div>
             </div>
 
             <div className="terms">
-              <input type="checkbox" required id="terms" />
+              <input type="checkbox" required id="terms" disabled={!!firebaseError} />
               <label htmlFor="terms">Li e aceito os termos do sorteio e autorizo o uso dos meus dados apenas para fins de validação do prêmio. <a href="#">Ver termos.</a></label>
             </div>
 
-            <button type="submit" className="btn-yellow" disabled={loading}>
-              {loading ? "Processando..." : "PARTICIPAR DO SORTEIO"}
+            <button type="submit" className="btn-yellow" disabled={loading || !!firebaseError}>
+              {loading ? "Processando..." : (!!firebaseError ? "BANCO DESCONECTADO" : "PARTICIPAR DO SORTEIO")}
             </button>
           </form>
         </div>
@@ -1255,7 +1396,7 @@ function AdminPage() {
   // LIVE STATE
   const [activeLive, setActiveLive] = useState<LiveSession | null>(null);
   const [timerStr, setTimerStr] = useState("00:00:00");
-  const [processingLive, setProcessingLive] = useState(false); // New state to prevent double clicks
+  const [processingLive, setProcessingLive] = useState(false); 
   const timerRef = useRef<any>(null);
 
   // VIEW STATE
@@ -1286,7 +1427,7 @@ function AdminPage() {
             setError(null);
         }, (err: any) => {
             console.error(err);
-            setError("Erro ao conectar realtime");
+            setError("Erro ao conectar realtime (Verifique permissões do Firestore no Console)");
         });
         return () => unsubscribe();
     } else {
@@ -1320,6 +1461,7 @@ function AdminPage() {
         timerRef.current = setInterval(() => {
             const now = Date.now();
             const diff = now - start;
+            if (isNaN(diff)) return;
             const hours = Math.floor(diff / 3600000);
             const minutes = Math.floor((diff % 3600000) / 60000);
             const seconds = Math.floor((diff % 60000) / 1000);
@@ -1334,61 +1476,6 @@ function AdminPage() {
     return () => clearInterval(timerRef.current);
   }, [activeLive]);
 
-  const toggleLive = async () => {
-      if (!db) {
-          alert("Banco de dados não conectado.");
-          return;
-      }
-      
-      try {
-          setProcessingLive(true);
-
-          if (activeLive) {
-              // ENCERRAR
-              if (!confirm("Tem certeza que deseja PARAR a live? O tempo será finalizado e o histórico salvo.")) {
-                  setProcessingLive(false);
-                  return;
-              }
-              
-              // Calcular participantes que marcaram presença durante a live
-              const startTime = new Date(activeLive.start_at);
-              const liveParticipants = participants.filter(p => {
-                  // Ignora fakes na contagem real
-                  if (p.id.startsWith('fake')) return false;
-                  
-                  // Verifica se created_at ou last_participation_at foi DEPOIS do inicio da live
-                  const created = new Date(p.created_at);
-                  const lastPart = p.last_participation_at ? new Date(p.last_participation_at) : created;
-                  
-                  return lastPart >= startTime;
-              }).length;
-
-              // @ts-ignore
-              await updateDoc(doc(db, "lives", activeLive.id), {
-                  end_at: new Date().toISOString(),
-                  participant_count: liveParticipants
-              });
-              
-              // Otimização: Remove estado ativo imediatamente para parar o timer visualmente
-              setActiveLive(null);
-          } else {
-              // INICIAR
-              // @ts-ignore
-              await addDoc(collection(db, "lives"), {
-                  start_at: new Date().toISOString(),
-                  end_at: null,
-                  participant_count: 0
-              });
-          }
-      } catch (error: any) {
-          console.error("Erro ao alternar live:", error);
-          alert("Erro ao alterar status da live: " + error.message);
-      } finally {
-          // Pequeno delay para evitar duplo clique visual
-          setTimeout(() => setProcessingLive(false), 500);
-      }
-  };
-
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -1398,7 +1485,7 @@ function AdminPage() {
       return;
     }
     if (!auth) {
-        alert("Firebase Auth não configurado.");
+        alert("Firebase Auth não conectado (Crie um novo projeto no Console).");
         setLoading(false);
         return;
     }
@@ -1472,6 +1559,11 @@ function AdminPage() {
         <div style={{display:'flex', height:'100vh', alignItems:'center', justifyContent:'center', position: 'relative', zIndex: 10}}>
             <div className="form-card" style={{width: '400px'}}>
                 <h2 style={{color:'white', marginBottom:'20px'}}>Login Admin</h2>
+                {firebaseError && (
+                    <div style={{background: '#ef4444', color: 'white', padding: '10px', borderRadius: '4px', marginBottom: '10px', fontSize: '0.8rem'}}>
+                        <b>Modo Demonstração (Sem Banco):</b> {firebaseError}
+                    </div>
+                )}
                 <form onSubmit={handleLogin}>
                     <div className="input-group"><input className="custom-input" placeholder="Email ou Usuário" value={email} onChange={e=>setEmail(e.target.value)}/></div>
                     <div className="input-group"><input className="custom-input" type="password" placeholder="Senha" value={password} onChange={e=>setPassword(e.target.value)}/></div>
@@ -1578,16 +1670,12 @@ function AdminPage() {
           <p className="page-subtitle">Gerencie o sorteio e visualize cadastros em tempo real.</p>
         </div>
         <div className="admin-actions">
-          {activeLive && <div className="timer-display">{timerStr}</div>}
+          {/* REMOVED TIMER AS REQUESTED */}
+          {/* {activeLive && <div className="timer-display">{timerStr}</div>} */}
           
-          <button 
-            className={`btn-top ${activeLive ? 'btn-red' : 'btn-green'}`} 
-            onClick={toggleLive}
-            disabled={processingLive}
-            style={processingLive ? {opacity: 0.7, cursor: 'not-allowed'} : {}}
-          >
-              {processingLive ? 'Processando...' : (activeLive ? '⏹ Parar Live' : '▶ Iniciar Live')}
-          </button>
+          <div className="mimoso-brand">
+            Sorteios do Mimoso
+          </div>
           
           <button className="btn-top btn-dark" onClick={handleLogout}>Sair</button>
           <button className="btn-top btn-green" onClick={() => setShowRoulette(true)}>🎲 Abrir Roleta</button>
@@ -1680,7 +1768,7 @@ function AdminPage() {
 function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   return (
-    <>
+    <ErrorBoundary>
       <style>{styles}</style>
       <CasinoBackground />
       <div className="content-wrapper">
@@ -1689,7 +1777,7 @@ function App() {
           {isAdmin ? "Alternar para Cadastro (User)" : "Alternar para Painel Admin"}
         </button>
       </div>
-    </>
+    </ErrorBoundary>
   );
 }
 
